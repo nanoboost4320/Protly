@@ -1,18 +1,20 @@
 /**
  * クラウド同期（Supabase）
  *
- * - ログイン中は、記録・設定の変更後に自動でクラウドへ保存（約1.5秒後にまとめて送信）
- * - アプリ起動時／ログイン時は、新しい方のデータを優先して同期
+ * - ログイン中は、記録・設定の変更後に自動でクラウドへ保存
+ * - 起動時／ログイン時は、中身を見て安全に同期（空データで上書きしない）
  */
 
 import { createBackup, parseBackup, restoreBackup, type BackupData } from "./exportImport";
 import {
   getLastSyncedAt,
   getLocalUpdatedAt,
+  loadAllRecords,
   setLastSyncedAt,
   setSuppressChangeNotify,
 } from "./storage";
 import { getSupabase, isCloudConfigured } from "./supabase";
+import type { DayRecord } from "./types";
 
 export { isCloudConfigured };
 
@@ -34,6 +36,20 @@ function emitSyncStatus(status: SyncStatus, detail?: string): void {
   window.dispatchEvent(
     new CustomEvent(SYNC_STATUS_EVENT, { detail: { status, detail } })
   );
+}
+
+/** 記録されている食品の件数 */
+export function countFoodItems(
+  records: Record<string, DayRecord> = loadAllRecords()
+): number {
+  let total = 0;
+  for (const record of Object.values(records)) {
+    total +=
+      record.meals.breakfast.length +
+      record.meals.lunch.length +
+      record.meals.dinner.length;
+  }
+  return total;
 }
 
 export async function getCurrentUser() {
@@ -72,8 +88,7 @@ export async function signOut() {
   emitSyncStatus("logged-out");
 }
 
-/** ローカルのデータをクラウドへ保存（上書き） */
-export async function uploadToCloud(): Promise<void> {
+async function requireUser() {
   const supabase = getSupabase();
   if (!supabase) throw new Error("クラウドが設定されていません");
 
@@ -85,6 +100,13 @@ export async function uploadToCloud(): Promise<void> {
   if (userError || !user) {
     throw new Error("ログインしてください");
   }
+
+  return { supabase, user };
+}
+
+/** ローカルのデータをクラウドへ保存（上書き） */
+export async function uploadToCloud(): Promise<void> {
+  const { supabase, user } = await requireUser();
 
   const backup = createBackup();
   const updatedAt = new Date().toISOString();
@@ -100,26 +122,32 @@ export async function uploadToCloud(): Promise<void> {
 
   if (error) throw error;
 
-  setLastSyncedAt(updatedAt);
-  // ローカル更新時刻も揃えておく（次回起動時の比較用）
+  // 本当に書けたか確認する
+  const { data: saved, error: verifyError } = await supabase
+    .from("user_backups")
+    .select("updated_at, data")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (verifyError) throw verifyError;
+  if (!saved) {
+    throw new Error(
+      "クラウドへの保存確認に失敗しました。Supabase の user_backups テーブルを確認してください。"
+    );
+  }
+
+  setLastSyncedAt(saved.updated_at ?? updatedAt);
   if (typeof window !== "undefined") {
-    localStorage.setItem("meal-tracker-local-updated-at", updatedAt);
+    localStorage.setItem(
+      "meal-tracker-local-updated-at",
+      saved.updated_at ?? updatedAt
+    );
   }
 }
 
 /** クラウドのデータをローカルへ復元（上書き） */
 export async function downloadFromCloud(): Promise<BackupData> {
-  const supabase = getSupabase();
-  if (!supabase) throw new Error("クラウドが設定されていません");
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error("ログインしてください");
-  }
+  const { supabase, user } = await requireUser();
 
   const { data, error } = await supabase
     .from("user_backups")
@@ -134,7 +162,6 @@ export async function downloadFromCloud(): Promise<BackupData> {
 
   const backup = parseBackup(data.data);
 
-  // 復元中は自動アップロードを止める（ループ防止）
   setSuppressChangeNotify(true);
   try {
     restoreBackup(backup);
@@ -169,7 +196,6 @@ export async function getCloudUpdatedAt(): Promise<string | null> {
 
 /**
  * 記録変更後に呼ぶ。少し待ってからクラウドへ自動アップロード。
- * （連続入力でもリクエストが飛びすぎないようにする）
  */
 export function scheduleAutoUpload(): void {
   if (!isCloudConfigured()) return;
@@ -188,7 +214,8 @@ export function scheduleAutoUpload(): void {
       }
       emitSyncStatus("syncing", "クラウドに保存中…");
       await uploadToCloud();
-      emitSyncStatus("synced", "自動同期しました");
+      const count = countFoodItems();
+      emitSyncStatus("synced", `自動同期しました（食品 ${count} 件）`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       emitSyncStatus("error", msg);
@@ -198,11 +225,13 @@ export function scheduleAutoUpload(): void {
 
 /**
  * 起動時・ログイン直後の同期
- * - クラウドの方が新しければダウンロード
- * - ローカルの方が新しければアップロード
- * - クラウドにまだ無ければアップロード
+ * - ローカルが空でクラウドにデータがある → 必ずダウンロード
+ * - クラウドが空でローカルにデータがある → アップロード
+ * - 両方ある → 新しい方を優先（空で上書きしない）
  */
-export async function syncOnStartup(): Promise<"downloaded" | "uploaded" | "none" | "skipped"> {
+export async function syncOnStartup(): Promise<
+  "downloaded" | "uploaded" | "none" | "skipped"
+> {
   if (!isCloudConfigured()) {
     emitSyncStatus("not-configured");
     return "skipped";
@@ -220,36 +249,90 @@ export async function syncOnStartup(): Promise<"downloaded" | "uploaded" | "none
 
     emitSyncStatus("syncing", "同期中…");
 
-    const cloudUpdatedAt = await getCloudUpdatedAt();
+    const { supabase } = await requireUser();
+    const localCount = countFoodItems();
     const localUpdatedAt = getLocalUpdatedAt();
     const lastSyncedAt = getLastSyncedAt();
 
-    // クラウドにデータがない → ローカルを上げる
-    if (!cloudUpdatedAt) {
+    const { data: cloudRow, error: cloudError } = await supabase
+      .from("user_backups")
+      .select("data, updated_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (cloudError) throw cloudError;
+
+    let cloudCount = 0;
+    let cloudUpdatedAt: string | null = null;
+
+    if (cloudRow?.data) {
+      cloudUpdatedAt = cloudRow.updated_at ?? null;
+      try {
+        const cloudBackup = parseBackup(cloudRow.data);
+        cloudCount = countFoodItems(cloudBackup.records);
+      } catch {
+        cloudCount = 0;
+      }
+    }
+
+    // クラウドにデータなし → ローカルにあれば上げる
+    if (!cloudRow) {
+      if (localCount === 0) {
+        emitSyncStatus("synced", "同期する記録がまだありません");
+        return "none";
+      }
       await uploadToCloud();
-      emitSyncStatus("synced", "クラウドへ初回保存しました");
+      emitSyncStatus(
+        "synced",
+        `クラウドへ初回保存しました（食品 ${localCount} 件）`
+      );
       return "uploaded";
     }
 
-    const cloudTime = Date.parse(cloudUpdatedAt);
-    const localTime = localUpdatedAt ? Date.parse(localUpdatedAt) : 0;
-    const syncedTime = lastSyncedAt ? Date.parse(lastSyncedAt) : 0;
-
-    // クラウドがローカル／最終同期より新しい → 下り
-    if (cloudTime > localTime && cloudTime > syncedTime) {
+    // ローカル空＆クラウドに記録あり → 必ず取り込む
+    if (localCount === 0 && cloudCount > 0) {
       await downloadFromCloud();
-      emitSyncStatus("synced", "クラウドから取り込みました");
+      emitSyncStatus(
+        "synced",
+        `クラウドから取り込みました（食品 ${cloudCount} 件）`
+      );
       return "downloaded";
     }
 
-    // ローカルがクラウドより新しい → 上り
-    if (localTime > cloudTime) {
+    // クラウド空＆ローカルに記録あり → 上げる
+    if (cloudCount === 0 && localCount > 0) {
       await uploadToCloud();
-      emitSyncStatus("synced", "クラウドを更新しました");
+      emitSyncStatus("synced", `クラウドを更新しました（食品 ${localCount} 件）`);
       return "uploaded";
     }
 
-    emitSyncStatus("synced", "同期済み");
+    // 両方空
+    if (localCount === 0 && cloudCount === 0) {
+      emitSyncStatus("synced", "同期する記録がまだありません");
+      return "none";
+    }
+
+    // 両方にデータがある → 更新時刻で判断
+    const cloudTime = cloudUpdatedAt ? Date.parse(cloudUpdatedAt) : 0;
+    const localTime = localUpdatedAt ? Date.parse(localUpdatedAt) : 0;
+    const syncedTime = lastSyncedAt ? Date.parse(lastSyncedAt) : 0;
+
+    if (cloudTime > localTime && cloudTime > syncedTime) {
+      await downloadFromCloud();
+      emitSyncStatus(
+        "synced",
+        `クラウドから取り込みました（食品 ${cloudCount} 件）`
+      );
+      return "downloaded";
+    }
+
+    if (localTime > cloudTime) {
+      await uploadToCloud();
+      emitSyncStatus("synced", `クラウドを更新しました（食品 ${localCount} 件）`);
+      return "uploaded";
+    }
+
+    emitSyncStatus("synced", `同期済み（食品 ${localCount} 件）`);
     return "none";
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
