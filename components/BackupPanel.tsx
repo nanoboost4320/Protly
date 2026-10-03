@@ -9,7 +9,9 @@ import {
   importBackupFile,
 } from "@/lib/exportImport";
 import {
+  countFoodItems,
   downloadFromCloud,
+  getCloudFoodCount,
   getCloudUpdatedAt,
   getCurrentUser,
   isCloudConfigured,
@@ -34,14 +36,25 @@ export default function BackupPanel() {
   const [password, setPassword] = useState("");
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [cloudUpdatedAt, setCloudUpdatedAt] = useState<string | null>(null);
+  const [localFoodCount, setLocalFoodCount] = useState(0);
+  const [cloudFoodCount, setCloudFoodCount] = useState<number | null>(null);
+
+  async function refreshCounts(loggedInUser: User | null) {
+    setLocalFoodCount(countFoodItems());
+    if (!loggedInUser) {
+      setCloudFoodCount(null);
+      setCloudUpdatedAt(null);
+      return;
+    }
+    setCloudUpdatedAt(await getCloudUpdatedAt());
+    setCloudFoodCount(await getCloudFoodCount());
+  }
 
   useEffect(() => {
     if (!cloudReady) return;
-    getCurrentUser().then((u) => {
+    getCurrentUser().then(async (u) => {
       setUser(u);
-      if (u) {
-        getCloudUpdatedAt().then(setCloudUpdatedAt);
-      }
+      await refreshCounts(u);
     });
   }, [cloudReady]);
 
@@ -92,7 +105,7 @@ export default function BackupPanel() {
         const u = await getCurrentUser();
         setUser(u);
         const result = await syncOnStartup();
-        setCloudUpdatedAt(await getCloudUpdatedAt());
+        await refreshCounts(u);
         if (result === "downloaded") {
           showOk("ログインしました。クラウドからデータを取り込みます…");
           setTimeout(() => window.location.reload(), 600);
@@ -111,8 +124,10 @@ export default function BackupPanel() {
     setBusy(true);
     try {
       await uploadToCloud();
-      setCloudUpdatedAt(await getCloudUpdatedAt());
-      showOk("クラウドへ同期しました");
+      await refreshCounts(user);
+      showOk(
+        `クラウドへ同期しました（この端末 ${countFoodItems()} 件）`
+      );
     } catch (e) {
       showErr(e);
     } finally {
@@ -131,8 +146,9 @@ export default function BackupPanel() {
     setBusy(true);
     try {
       const backup = await downloadFromCloud();
-      const count = Object.keys(backup.records).length;
-      showOk(`クラウドから復元しました（${count} 日分）。再読み込みします。`);
+      const count = countFoodItems(backup.records);
+      await refreshCounts(user);
+      showOk(`クラウドから復元しました（${count} 件）。再読み込みします。`);
       setTimeout(() => window.location.reload(), 800);
     } catch (e) {
       showErr(e);
@@ -144,7 +160,7 @@ export default function BackupPanel() {
   async function handleSignOut() {
     await signOut();
     setUser(null);
-    setCloudUpdatedAt(null);
+    await refreshCounts(null);
     showOk("ログアウトしました");
   }
 
@@ -298,12 +314,19 @@ export default function BackupPanel() {
                 {user.email}
               </span>
             </div>
-            {cloudUpdatedAt && (
-              <p className="text-xs text-slate-400">
-                クラウド最終更新:{" "}
-                {new Date(cloudUpdatedAt).toLocaleString("ja-JP")}
+            <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p>この端末の食品: {localFoodCount} 件</p>
+              <p>
+                クラウドの食品:{" "}
+                {cloudFoodCount === null ? "確認中…" : `${cloudFoodCount} 件`}
               </p>
-            )}
+              {cloudUpdatedAt && (
+                <p className="mt-1 text-slate-400">
+                  クラウド最終更新:{" "}
+                  {new Date(cloudUpdatedAt).toLocaleString("ja-JP")}
+                </p>
+              )}
+            </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
@@ -311,7 +334,7 @@ export default function BackupPanel() {
                 onClick={handleUpload}
                 className="flex-1 rounded-xl border border-emerald-200 bg-white py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
               >
-                今すぐ同期
+                今すぐ同期（アップロード）
               </button>
               <button
                 type="button"
@@ -319,7 +342,7 @@ export default function BackupPanel() {
                 onClick={handleDownload}
                 className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                クラウドから強制復元
+                クラウドから取り込む
               </button>
             </div>
             <button

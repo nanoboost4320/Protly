@@ -194,6 +194,32 @@ export async function getCloudUpdatedAt(): Promise<string | null> {
   return data?.updated_at ?? null;
 }
 
+/** クラウド上の食品件数（ローカルは変更しない） */
+export async function getCloudFoodCount(): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { data, error } = await supabase
+    .from("user_backups")
+    .select("data")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error || !data?.data) return 0;
+
+  try {
+    const backup = parseBackup(data.data);
+    return countFoodItems(backup.records);
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * 記録変更後に呼ぶ。少し待ってからクラウドへ自動アップロード。
  */
