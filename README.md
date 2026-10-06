@@ -5,7 +5,8 @@
 ## 完成機能一覧
 
 - 朝・昼・晩の食事記録
-- 食材名検索 → カロリー・PFCの自動計算（内蔵データベース）
+- 食材名検索 → カロリー・PFCの自動計算（日本食品標準成分表）
+- よく使う食材・最近使った食材
 - カロリー・タンパク質の目標設定と過不足表示
 - PFCバランスの自動計算
 - 食品の編集・削除
@@ -34,24 +35,30 @@ npm run dev
 3. **履歴** で過去の食事内容を確認
 4. **統計** で週・月のマイナスカロリーなどを確認
 
+## 栄養データの出典
+
+食材検索の数値は、文部科学省の **日本食品標準成分表（八訂）増補2023年** から引用しています。  
+詳細は [`docs/NUTRITION_SOURCE.md`](docs/NUTRITION_SOURCE.md) を参照してください。
+
 ## プロジェクト構成
 
 ```
 Protly/
-├── app/                  # ページ
+├── app/                  # ページ・API
+│   ├── api/nutrition-search/  # 成分表検索API
 │   ├── page.tsx          # ホーム（今日）
 │   ├── history/          # 履歴
 │   ├── stats/            # 統計
 │   └── settings/         # 設定
 ├── components/           # UI部品
+├── data/
+│   └── mext-foods.json   # 成分表（同梱）
 ├── lib/
-│   ├── types.ts          # 型定義
-│   ├── calculations.ts   # 計算
-│   ├── storage.ts        # localStorage
-│   ├── foodDatabase.ts   # 食材DB・検索
-│   ├── dateUtils.ts      # 日付ユーティリティ
-│   └── stats.ts          # 週・月集計
-└── package.json
+│   ├── mextSearch.ts     # 成分表検索（サーバー）
+│   ├── mextConstants.ts  # 出典定数・スケール
+│   └── ...
+└── docs/
+    └── NUTRITION_SOURCE.md
 ```
 
 ## スマホで使う（公開）
@@ -70,4 +77,4 @@ Protly/
 
 - 普段のデータはブラウザの localStorage にあります
 - サイトデータ削除で消えることがあるので、定期的なエクスポートをおすすめします
-- 食材の栄養素は概算値です。食品表示がある場合は手動入力もできます
+- 成分表にない市販品などは手動入力か「よく使う食材」で対応できます

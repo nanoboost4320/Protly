@@ -31,6 +31,10 @@ yarn-error.log*
 # env files
 .env*.local
 
+# local conversion source (regenerate JSON via scripts/build-mext-json.mjs)
+/data/mext-raw.xlsx
+/tmp-mext.html
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

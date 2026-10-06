@@ -3,7 +3,7 @@
 /**
  * 食品追加・編集モーダル
  * - よく使う／最近使った食材からワンタップ入力
- * - 食材名検索 → 栄養素を自動入力
+ * - 日本食品標準成分表（同梱JSON）をサーバー検索
  * - 手動入力も可能
  * - 編集時は既存データを初期表示し、同じIDで更新
  */
@@ -18,12 +18,12 @@ import {
   type SavedFood,
 } from "@/lib/favorites";
 import {
+  MEXT_ATTRIBUTION,
   scaleNutrition,
-  searchFoods,
-  type FoodTemplate,
-} from "@/lib/foodDatabase";
+  type MextFood,
+} from "@/lib/mextConstants";
 import { MEAL_LABELS, type FoodItem, type MealType } from "@/lib/types";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface AddFoodModalProps {
   mealType: MealType;
@@ -31,6 +31,12 @@ interface AddFoodModalProps {
   initialFood?: FoodItem | null;
   onSave: (mealType: MealType, food: FoodItem) => void;
   onClose: () => void;
+}
+
+interface SearchResponse {
+  attribution?: string;
+  items: MextFood[];
+  message?: string;
 }
 
 function round1(n: number): number {
@@ -60,21 +66,60 @@ export default function AddFoodModal({
   const [carbs, setCarbs] = useState(
     initialFood ? String(initialFood.carbs) : ""
   );
-  const [selected, setSelected] = useState<FoodTemplate | null>(null);
+  const [selected, setSelected] = useState<MextFood | null>(null);
   const [savedBase, setSavedBase] = useState<SavedFood | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [saveAsFavorite, setSaveAsFavorite] = useState(false);
   const [favorites, setFavorites] = useState<SavedFood[]>([]);
   const [recentFoods, setRecentFoods] = useState<SavedFood[]>([]);
-
-  const results = useMemo(() => searchFoods(name), [name]);
+  const [results, setResults] = useState<MextFood[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [attribution, setAttribution] = useState(MEXT_ATTRIBUTION);
 
   useEffect(() => {
     setFavorites(loadFavorites());
     setRecentFoods(loadRecentFoods());
   }, []);
 
-  // 検索で選んだ食材 + 量 が変わったら自動計算
+  // 成分表検索（デバウンス）
+  useEffect(() => {
+    if (isEdit) return;
+    const q = name.trim();
+    if (!q || selected) {
+      setResults([]);
+      setSearching(false);
+      setSearchError(null);
+      return;
+    }
+
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      setSearchError(null);
+      try {
+        const res = await fetch(
+          `/api/nutrition-search?q=${encodeURIComponent(q)}`
+        );
+        const data = (await res.json()) as SearchResponse;
+        if (!res.ok) {
+          setResults([]);
+          setSearchError(data.message ?? "検索に失敗しました");
+          return;
+        }
+        if (data.attribution) setAttribution(data.attribution);
+        setResults(data.items ?? []);
+      } catch {
+        setResults([]);
+        setSearchError("検索に失敗しました。通信を確認してください。");
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [name, selected, isEdit]);
+
+  // 成分表で選んだ食材 + 量 が変わったら自動計算
   useEffect(() => {
     if (!selected) return;
     const amt = Number(amount);
@@ -100,13 +145,14 @@ export default function AddFoodModal({
     setCarbs(String(round1(savedBase.carbs * ratio)));
   }, [savedBase, amount]);
 
-  function selectFood(food: FoodTemplate) {
+  function selectFood(food: MextFood) {
     setSelected(food);
     setSavedBase(null);
     setName(food.name);
     setAmount(String(food.baseAmount));
     setUnit(food.unit);
     setShowResults(false);
+    setResults([]);
     setSaveAsFavorite(false);
   }
 
@@ -121,6 +167,7 @@ export default function AddFoodModal({
     setFat(String(food.fat));
     setCarbs(String(food.carbs));
     setShowResults(false);
+    setResults([]);
     setSaveAsFavorite(false);
   }
 
@@ -144,7 +191,6 @@ export default function AddFoodModal({
       return;
     }
 
-    // 4項目のうち1つだけ空欄なら、残り3つから自動補完（入力済みは上書きしない）
     const filled = fillMissingNutrition({
       calories,
       protein,
@@ -179,6 +225,7 @@ export default function AddFoodModal({
   }
 
   const alreadyFavorite = name.trim() ? isFavoriteName(name) : false;
+  const showSearchPanel = !isEdit && showResults && name.trim() && !selected;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
@@ -256,42 +303,56 @@ export default function AddFoodModal({
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               onFocus={() => setShowResults(true)}
-              placeholder="例: 鶏むね肉（入力すると候補が出ます）"
+              placeholder="例: にら、きゅうり、木綿豆腐"
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
               autoComplete="off"
             />
 
-            {showResults && name.trim() && results.length > 0 && (
-              <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-                {results.map((food) => (
-                  <li key={food.id}>
-                    <button
-                      type="button"
-                      onClick={() => selectFood(food)}
-                      className="w-full px-4 py-2.5 text-left text-sm hover:bg-emerald-50"
-                    >
-                      <span className="font-medium">{food.name}</span>
-                      <span className="mt-0.5 block text-xs text-slate-400">
-                        {food.baseAmount}
-                        {food.unit}あたり: {food.calories}kcal P{food.protein}g
-                        F{food.fat}g C{food.carbs}g
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {showResults && name.trim() && results.length === 0 && (
-              <p className="mt-1 text-xs text-slate-400">
-                候補なし。下で栄養素を手動入力できます。
-              </p>
+            {showSearchPanel && (
+              <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] leading-snug text-slate-400">
+                  {attribution}
+                  （可食部100gあたり）
+                </p>
+                {searching && (
+                  <p className="px-4 py-3 text-sm text-slate-400">検索中...</p>
+                )}
+                {!searching && searchError && (
+                  <p className="px-4 py-3 text-sm text-red-500">{searchError}</p>
+                )}
+                {!searching && !searchError && results.length === 0 && (
+                  <p className="px-4 py-3 text-sm text-slate-400">
+                    成分表に候補がありません。下で栄養素を手動入力できます。
+                  </p>
+                )}
+                {!searching && results.length > 0 && (
+                  <ul className="max-h-48 overflow-y-auto">
+                    {results.map((food) => (
+                      <li key={food.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectFood(food)}
+                          className="w-full px-4 py-2.5 text-left text-sm hover:bg-emerald-50"
+                        >
+                          <span className="font-medium">{food.name}</span>
+                          <span className="mt-0.5 block text-xs text-slate-400">
+                            {food.baseAmount}
+                            {food.unit}あたり: {food.calories}kcal P
+                            {food.protein}g F{food.fat}g C{food.carbs}g
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
 
           {selected && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
               「{selected.name}」を選択中。量を変えると自動計算されます。
+              <p className="mt-1 text-xs text-emerald-700/80">{attribution}</p>
             </div>
           )}
 
@@ -346,7 +407,7 @@ export default function AddFoodModal({
 
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="mb-1 text-sm font-medium text-slate-600">
-              栄養素（検索で自動入力 / 手動でもOK）
+              栄養素（成分表で自動入力 / 手動でもOK）
             </p>
             <p className="mb-3 text-xs text-slate-400">
               カロリー・P・F・Cのうち1つだけ空欄なら、保存時に自動計算します
