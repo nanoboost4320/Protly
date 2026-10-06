@@ -6,6 +6,7 @@
  */
 
 import AddFoodModal from "@/components/AddFoodModal";
+import BrandWordmark from "@/components/BrandWordmark";
 import DailySummary from "@/components/DailySummary";
 import MealSection from "@/components/MealSection";
 import {
@@ -95,9 +96,11 @@ export default function HomePage() {
 
   return (
     <main className="px-4 py-6">
-      <header className="mb-4">
-        <h1 className="text-xl font-bold tracking-tight">Protly</h1>
-        <p className="text-sm text-slate-500">
+      <header className="mb-5">
+        <h1 className="leading-none">
+          <BrandWordmark size="hero" />
+        </h1>
+        <p className="mt-1.5 text-sm text-slate-500">
           {isToday ? "今日の食事記録" : "選択した日の食事記録"}
         </p>
       </header>

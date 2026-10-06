@@ -11,3 +11,8 @@ body {
   font-family: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
     "Yu Gothic", Meiryo, sans-serif;
 }
+
+.brand-wordmark {
+  font-family: var(--font-brand), "Avenir Next", "Segoe UI", sans-serif;
+  font-feature-settings: "ss01" on;
+}

@@ -9,6 +9,7 @@
  */
 
 import BackupPanel from "@/components/BackupPanel";
+import BrandWordmark from "@/components/BrandWordmark";
 import FavoritesPanel from "@/components/FavoritesPanel";
 import { loadSettings, saveSettings } from "@/lib/storage";
 import type { Settings } from "@/lib/types";
@@ -46,8 +47,8 @@ export default function SettingsPage() {
   return (
     <main className="px-4 py-6">
       <header className="mb-6">
-        <p className="text-xs font-semibold tracking-wide text-emerald-600">
-          Protly
+        <p className="mb-1">
+          <BrandWordmark size="sm" />
         </p>
         <h1 className="text-xl font-bold">⚙️ 設定</h1>
       </header>

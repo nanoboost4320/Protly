@@ -1,8 +1,16 @@
 import type { Metadata } from "next";
+import { Syne } from "next/font/google";
 import BottomNav from "@/components/BottomNav";
 import CloudSyncProvider from "@/components/CloudSyncProvider";
 import SyncStatusBanner from "@/components/SyncStatusBanner";
 import "./globals.css";
+
+const syne = Syne({
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  variable: "--font-brand",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Protly",
@@ -21,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
+    <html lang="ja" className={syne.variable}>
       <body className="min-h-screen bg-slate-50 antialiased">
         <CloudSyncProvider>
           <SyncStatusBanner />

@@ -5,6 +5,7 @@
  * - 週 / 月のカロリー・タンパク質の差分集計
  */
 
+import BrandWordmark from "@/components/BrandWordmark";
 import { CLOUD_DATA_PULLED_EVENT } from "@/components/CloudSyncProvider";
 import { formatDiff, getTodayString } from "@/lib/calculations";
 import {
@@ -141,8 +142,8 @@ export default function StatsPage() {
   return (
     <main className="px-4 py-6">
       <header className="mb-6">
-        <p className="text-xs font-semibold tracking-wide text-emerald-600">
-          Protly
+        <p className="mb-1">
+          <BrandWordmark size="sm" />
         </p>
         <h1 className="text-xl font-bold">📊 統計</h1>
         <p className="text-sm text-slate-500">

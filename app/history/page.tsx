@@ -7,6 +7,7 @@
  */
 
 import AddFoodModal from "@/components/AddFoodModal";
+import BrandWordmark from "@/components/BrandWordmark";
 import { CLOUD_DATA_PULLED_EVENT } from "@/components/CloudSyncProvider";
 import DailySummary from "@/components/DailySummary";
 import MealSection from "@/components/MealSection";
@@ -178,8 +179,8 @@ export default function HistoryPage() {
   return (
     <main className="px-4 py-6">
       <header className="mb-6">
-        <p className="text-xs font-semibold tracking-wide text-emerald-600">
-          Protly
+        <p className="mb-1">
+          <BrandWordmark size="sm" />
         </p>
         <h1 className="text-xl font-bold">📅 履歴</h1>
         <p className="text-sm text-slate-500">
