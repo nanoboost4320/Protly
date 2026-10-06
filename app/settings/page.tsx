@@ -9,6 +9,7 @@
  */
 
 import BackupPanel from "@/components/BackupPanel";
+import FavoritesPanel from "@/components/FavoritesPanel";
 import { loadSettings, saveSettings } from "@/lib/storage";
 import type { Settings } from "@/lib/types";
 import { useEffect, useState } from "react";
@@ -141,6 +142,8 @@ export default function SettingsPage() {
         >
           {saved ? "✓ 保存しました" : "目標を保存"}
         </button>
+
+        <FavoritesPanel />
 
         <BackupPanel />
       </div>

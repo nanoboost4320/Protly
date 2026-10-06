@@ -2,12 +2,21 @@
 
 /**
  * 食品追加・編集モーダル
+ * - よく使う／最近使った食材からワンタップ入力
  * - 食材名検索 → 栄養素を自動入力
  * - 手動入力も可能
  * - 編集時は既存データを初期表示し、同じIDで更新
  */
 
 import { fillMissingNutrition, generateId } from "@/lib/calculations";
+import {
+  addFavorite,
+  isFavoriteName,
+  loadFavorites,
+  loadRecentFoods,
+  rememberRecent,
+  type SavedFood,
+} from "@/lib/favorites";
 import {
   scaleNutrition,
   searchFoods,
@@ -22,6 +31,10 @@ interface AddFoodModalProps {
   initialFood?: FoodItem | null;
   onSave: (mealType: MealType, food: FoodItem) => void;
   onClose: () => void;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 export default function AddFoodModal({
@@ -48,9 +61,18 @@ export default function AddFoodModal({
     initialFood ? String(initialFood.carbs) : ""
   );
   const [selected, setSelected] = useState<FoodTemplate | null>(null);
+  const [savedBase, setSavedBase] = useState<SavedFood | null>(null);
   const [showResults, setShowResults] = useState(false);
+  const [saveAsFavorite, setSaveAsFavorite] = useState(false);
+  const [favorites, setFavorites] = useState<SavedFood[]>([]);
+  const [recentFoods, setRecentFoods] = useState<SavedFood[]>([]);
 
   const results = useMemo(() => searchFoods(name), [name]);
+
+  useEffect(() => {
+    setFavorites(loadFavorites());
+    setRecentFoods(loadRecentFoods());
+  }, []);
 
   // 検索で選んだ食材 + 量 が変わったら自動計算
   useEffect(() => {
@@ -65,18 +87,53 @@ export default function AddFoodModal({
     setCarbs(String(scaled.carbs));
   }, [selected, amount]);
 
+  // よく使う／最近から選んだ食材は、量を変えると比例計算
+  useEffect(() => {
+    if (!savedBase || savedBase.amount <= 0) return;
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return;
+
+    const ratio = amt / savedBase.amount;
+    setCalories(String(Math.round(savedBase.calories * ratio)));
+    setProtein(String(round1(savedBase.protein * ratio)));
+    setFat(String(round1(savedBase.fat * ratio)));
+    setCarbs(String(round1(savedBase.carbs * ratio)));
+  }, [savedBase, amount]);
+
   function selectFood(food: FoodTemplate) {
     setSelected(food);
+    setSavedBase(null);
     setName(food.name);
     setAmount(String(food.baseAmount));
     setUnit(food.unit);
     setShowResults(false);
+    setSaveAsFavorite(false);
+  }
+
+  function selectSaved(food: SavedFood) {
+    setSelected(null);
+    setSavedBase(food);
+    setName(food.name);
+    setAmount(String(food.amount));
+    setUnit(food.unit);
+    setCalories(String(food.calories));
+    setProtein(String(food.protein));
+    setFat(String(food.fat));
+    setCarbs(String(food.carbs));
+    setShowResults(false);
+    setSaveAsFavorite(false);
   }
 
   function handleNameChange(value: string) {
     setName(value);
     setSelected(null);
+    setSavedBase(null);
     setShowResults(true);
+  }
+
+  function clearAutoSource() {
+    setSelected(null);
+    setSavedBase(null);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -106,9 +163,22 @@ export default function AddFoodModal({
       carbs: filled.carbs,
     };
 
+    if (!isEdit) {
+      if (saveAsFavorite) {
+        addFavorite(food);
+        rememberRecent(food, { silent: true });
+      } else {
+        rememberRecent(food);
+      }
+    } else if (saveAsFavorite) {
+      addFavorite(food);
+    }
+
     onSave(mealType, food);
     onClose();
   }
+
+  const alreadyFavorite = name.trim() ? isFavoriteName(name) : false;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
@@ -126,6 +196,57 @@ export default function AddFoodModal({
             ✕
           </button>
         </div>
+
+        {!isEdit && (favorites.length > 0 || recentFoods.length > 0) && (
+          <div className="mb-4 space-y-3">
+            {favorites.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-slate-500">
+                  よく使う
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {favorites.map((food) => (
+                    <button
+                      key={food.id}
+                      type="button"
+                      onClick={() => selectSaved(food)}
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-left text-xs text-emerald-800 transition-colors hover:border-emerald-400 hover:bg-emerald-100"
+                    >
+                      <span className="font-medium">{food.name}</span>
+                      <span className="ml-1 text-emerald-600/80">
+                        {food.amount}
+                        {food.unit}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {recentFoods.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-slate-500">
+                  最近使った
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {recentFoods.map((food) => (
+                    <button
+                      key={food.id}
+                      type="button"
+                      onClick={() => selectSaved(food)}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-100"
+                    >
+                      <span className="font-medium">{food.name}</span>
+                      <span className="ml-1 text-slate-400">
+                        {food.amount}
+                        {food.unit}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">
@@ -171,6 +292,12 @@ export default function AddFoodModal({
           {selected && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
               「{selected.name}」を選択中。量を変えると自動計算されます。
+            </div>
+          )}
+
+          {savedBase && !selected && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
+              「{savedBase.name}」を呼び出し中。量を変えると比例計算されます。
             </div>
           )}
 
@@ -234,7 +361,7 @@ export default function AddFoodModal({
                   value={calories}
                   onChange={(e) => {
                     setCalories(e.target.value);
-                    setSelected(null);
+                    clearAutoSource();
                   }}
                   step="any"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
@@ -249,7 +376,7 @@ export default function AddFoodModal({
                   value={protein}
                   onChange={(e) => {
                     setProtein(e.target.value);
-                    setSelected(null);
+                    clearAutoSource();
                   }}
                   step="any"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
@@ -264,7 +391,7 @@ export default function AddFoodModal({
                   value={fat}
                   onChange={(e) => {
                     setFat(e.target.value);
-                    setSelected(null);
+                    clearAutoSource();
                   }}
                   step="any"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
@@ -279,7 +406,7 @@ export default function AddFoodModal({
                   value={carbs}
                   onChange={(e) => {
                     setCarbs(e.target.value);
-                    setSelected(null);
+                    clearAutoSource();
                   }}
                   step="any"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
@@ -287,6 +414,23 @@ export default function AddFoodModal({
               </div>
             </div>
           </div>
+
+          <label className="flex items-start gap-2 rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={saveAsFavorite}
+              onChange={(e) => setSaveAsFavorite(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">よく使う食材に登録</span>
+              {alreadyFavorite && !saveAsFavorite && (
+                <span className="mt-0.5 block text-xs text-slate-400">
+                  すでに登録済み（チェックすると内容を更新）
+                </span>
+              )}
+            </span>
+          </label>
 
           <button
             type="submit"

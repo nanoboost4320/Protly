@@ -6,9 +6,16 @@
  */
 
 import { loadAllRecords, loadSettings, saveAllRecords, saveSettings } from "./storage";
+import {
+  loadFavorites,
+  loadRecentFoods,
+  saveFavorites,
+  saveRecentFoods,
+  type SavedFood,
+} from "./favorites";
 import { DEFAULT_SETTINGS, type DayRecord, type Settings } from "./types";
 
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 const APP_IDS = ["protly", "meal-tracker"] as const;
 export type AppId = (typeof APP_IDS)[number];
@@ -19,6 +26,8 @@ export interface BackupData {
   app: AppId;
   settings: Settings;
   records: Record<string, DayRecord>;
+  favorites?: SavedFood[];
+  recentFoods?: SavedFood[];
 }
 
 /** 現在のデータをバックアップオブジェクトにする */
@@ -29,6 +38,8 @@ export function createBackup(): BackupData {
     app: "protly",
     settings: loadSettings(),
     records: loadAllRecords(),
+    favorites: loadFavorites(),
+    recentFoods: loadRecentFoods(),
   };
 }
 
@@ -73,6 +84,8 @@ export function parseBackup(raw: unknown): BackupData {
     app: "protly",
     settings: { ...DEFAULT_SETTINGS, ...data.settings },
     records: data.records as Record<string, DayRecord>,
+    favorites: Array.isArray(data.favorites) ? data.favorites : [],
+    recentFoods: Array.isArray(data.recentFoods) ? data.recentFoods : [],
   };
 }
 
@@ -80,6 +93,8 @@ export function parseBackup(raw: unknown): BackupData {
 export function restoreBackup(backup: BackupData): void {
   saveSettings(backup.settings);
   saveAllRecords(backup.records);
+  saveFavorites(backup.favorites ?? [], { silent: true });
+  saveRecentFoods(backup.recentFoods ?? [], { silent: true });
 }
 
 /** ファイルから読み込んで復元する */
