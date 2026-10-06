@@ -47,6 +47,7 @@ export function calculateDiff(
  * PFCバランス（%）を計算する
  * タンパク質・脂質・炭水化物のカロリー換算:
  *   P: 4 kcal/g, F: 9 kcal/g, C: 4 kcal/g
+ * 表示は小数第1位まで
  */
 export function calculatePFCPercent(totals: NutritionTotals): {
   protein: number;
@@ -62,10 +63,12 @@ export function calculatePFCPercent(totals: NutritionTotals): {
     return { protein: 0, fat: 0, carbs: 0 };
   }
 
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+
   return {
-    protein: Math.round((proteinCal / total) * 100),
-    fat: Math.round((fatCal / total) * 100),
-    carbs: Math.round((carbsCal / total) * 100),
+    protein: round1((proteinCal / total) * 100),
+    fat: round1((fatCal / total) * 100),
+    carbs: round1((carbsCal / total) * 100),
   };
 }
 

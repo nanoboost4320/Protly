@@ -115,17 +115,19 @@ export default function DailySummary({
         </p>
         <div className="flex gap-3 text-sm">
           <span className="rounded-lg bg-blue-50 px-3 py-1.5 text-blue-700">
-            P {pfc.protein}%
+            P {pfc.protein.toFixed(1)}%
           </span>
           <span className="rounded-lg bg-yellow-50 px-3 py-1.5 text-yellow-700">
-            F {pfc.fat}%
+            F {pfc.fat.toFixed(1)}%
           </span>
           <span className="rounded-lg bg-green-50 px-3 py-1.5 text-green-700">
-            C {pfc.carbs}%
+            C {pfc.carbs.toFixed(1)}%
           </span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          P {totals.protein}g / F {totals.fat}g / C {totals.carbs}g
+          P {Number(totals.protein.toFixed(1))}g / F{" "}
+          {Number(totals.fat.toFixed(1))}g / C{" "}
+          {Number(totals.carbs.toFixed(1))}g
         </p>
       </div>
     </div>

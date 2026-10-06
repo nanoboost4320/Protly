@@ -277,18 +277,20 @@ export default function StatsPage() {
         </h2>
         <div className="flex gap-3 text-sm">
           <span className="rounded-lg bg-blue-50 px-3 py-1.5 text-blue-700">
-            P {stats.avgPFC.protein}%
+            P {stats.avgPFC.protein.toFixed(1)}%
           </span>
           <span className="rounded-lg bg-yellow-50 px-3 py-1.5 text-yellow-700">
-            F {stats.avgPFC.fat}%
+            F {stats.avgPFC.fat.toFixed(1)}%
           </span>
           <span className="rounded-lg bg-green-50 px-3 py-1.5 text-green-700">
-            C {stats.avgPFC.carbs}%
+            C {stats.avgPFC.carbs.toFixed(1)}%
           </span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          平均摂取: {stats.avgTotals.calories} kcal / P{stats.avgTotals.protein}g
-          / F{stats.avgTotals.fat}g / C{stats.avgTotals.carbs}g
+          平均摂取: {stats.avgTotals.calories} kcal / P
+          {Number(stats.avgTotals.protein.toFixed(1))}g / F
+          {Number(stats.avgTotals.fat.toFixed(1))}g / C
+          {Number(stats.avgTotals.carbs.toFixed(1))}g
         </p>
       </section>
     </main>
