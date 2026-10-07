@@ -17,6 +17,7 @@ import {
   updateMyFood,
   type SavedFood,
 } from "@/lib/favorites";
+import { formatGrams } from "@/lib/calculations";
 import { DATA_CHANGED_EVENT } from "@/lib/storage";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -118,8 +119,9 @@ function FoodEditRow({
             <p className="font-medium">{food.name}</p>
             <p className="text-xs text-slate-400">
               {food.amount}
-              {food.unit} · {food.calories} kcal · P{food.protein} F{food.fat} C
-              {food.carbs}
+              {food.unit} · {Math.round(food.calories)} kcal · P
+              {formatGrams(food.protein)} F{formatGrams(food.fat)} C
+              {formatGrams(food.carbs)}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1">

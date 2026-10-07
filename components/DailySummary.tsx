@@ -6,6 +6,7 @@ import {
   calculatePFCPercent,
   calculateProgress,
   formatDiff,
+  formatGrams,
 } from "@/lib/calculations";
 import type { NutritionDiff, NutritionTotals, Settings } from "@/lib/types";
 
@@ -83,7 +84,7 @@ export default function DailySummary({
         <div className="mb-1 flex items-baseline justify-between">
           <span className="text-sm font-medium">💪 タンパク質</span>
           <span className="text-lg font-bold">
-            {totals.protein}
+            {formatGrams(totals.protein)}
             <span className="text-sm font-normal text-slate-500">
               {" "}
               / {settings.targetProtein} g
@@ -125,9 +126,8 @@ export default function DailySummary({
           </span>
         </div>
         <p className="mt-2 text-xs text-slate-400">
-          P {Number(totals.protein.toFixed(1))}g / F{" "}
-          {Number(totals.fat.toFixed(1))}g / C{" "}
-          {Number(totals.carbs.toFixed(1))}g
+          P {formatGrams(totals.protein)}g / F {formatGrams(totals.fat)}g / C{" "}
+          {formatGrams(totals.carbs)}g
         </p>
       </div>
     </div>

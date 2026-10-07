@@ -5,6 +5,7 @@
  * （献立＋ごはん220gをまとめて昼食へ追加）
  */
 
+import { formatGrams } from "@/lib/calculations";
 import {
   getJoyLunchForDate,
   JOY_LUNCH_RICE_AMOUNT_G,
@@ -61,7 +62,8 @@ export default function JoyLunchAddButton({
       </p>
       <p className="mb-1 text-sm font-medium text-slate-800">{menu.name}</p>
       <p className="mb-1 text-xs text-slate-500">
-        {menu.calories} kcal · P{menu.protein}g · F{menu.fat}g
+        {Math.round(menu.calories)} kcal · P{formatGrams(menu.protein)}g · F
+        {formatGrams(menu.fat)}g
         （Cは追加時に自動計算）
       </p>
       <p className="mb-3 text-xs text-slate-500">

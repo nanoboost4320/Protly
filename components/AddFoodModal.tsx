@@ -9,7 +9,12 @@
  * - 編集時は既存データを初期表示し、同じIDで更新
  */
 
-import { fillMissingNutrition, generateId } from "@/lib/calculations";
+import {
+  fillMissingNutrition,
+  formatGrams,
+  generateId,
+  round1,
+} from "@/lib/calculations";
 import {
   addFavorite,
   isFavoriteName,
@@ -39,10 +44,6 @@ interface SearchResponse {
   attribution?: string;
   items: MextFood[];
   message?: string;
-}
-
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
 }
 
 export default function AddFoodModal({
@@ -177,10 +178,10 @@ export default function AddFoodModal({
     setName(food.name);
     setAmount(String(food.amount));
     setUnit(food.unit);
-    setCalories(String(food.calories));
-    setProtein(String(food.protein));
-    setFat(String(food.fat));
-    setCarbs(String(food.carbs));
+    setCalories(String(Math.round(food.calories)));
+    setProtein(formatGrams(food.protein));
+    setFat(formatGrams(food.fat));
+    setCarbs(formatGrams(food.carbs));
     setShowResults(false);
     setMextOpen(false);
     setMextResults([]);
@@ -324,8 +325,10 @@ export default function AddFoodModal({
                           <span className="font-medium">{food.name}</span>
                           <span className="mt-0.5 block text-xs text-slate-400">
                             {food.amount}
-                            {food.unit}: {food.calories}kcal P{food.protein}g F
-                            {food.fat}g C{food.carbs}g
+                            {food.unit}: {Math.round(food.calories)}kcal P
+                            {formatGrams(food.protein)}g F
+                            {formatGrams(food.fat)}g C
+                            {formatGrams(food.carbs)}g
                           </span>
                         </button>
                       </li>
@@ -394,8 +397,10 @@ export default function AddFoodModal({
                               <span className="font-medium">{food.name}</span>
                               <span className="mt-0.5 block text-xs text-slate-400">
                                 {food.baseAmount}
-                                {food.unit}あたり: {food.calories}kcal P
-                                {food.protein}g F{food.fat}g C{food.carbs}g
+                                {food.unit}あたり: {Math.round(food.calories)}
+                                kcal P{formatGrams(food.protein)}g F
+                                {formatGrams(food.fat)}g C
+                                {formatGrams(food.carbs)}g
                               </span>
                             </button>
                           </li>
@@ -458,7 +463,9 @@ export default function AddFoodModal({
               <p>
                 <span className="text-lg font-bold">{calories || 0}</span> kcal
                 <span className="ml-3 text-slate-500">
-                  P{protein || 0} F{fat || 0} C{carbs || 0}
+                  P{protein ? formatGrams(Number(protein)) : 0} F
+                  {fat ? formatGrams(Number(fat)) : 0} C
+                  {carbs ? formatGrams(Number(carbs)) : 0}
                 </span>
               </p>
             </div>

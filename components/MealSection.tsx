@@ -6,7 +6,7 @@
  */
 
 import { foodDraggableId, mealDroppableId } from "@/lib/mealDndIds";
-import { calculateTotals } from "@/lib/calculations";
+import { calculateTotals, formatGrams } from "@/lib/calculations";
 import { addFavorite, isFavoriteName } from "@/lib/favorites";
 import {
   MEAL_ICONS,
@@ -85,7 +85,8 @@ function FoodRow({
           {item.unit}
         </span>
         <div className="text-xs text-slate-400">
-          {item.calories} kcal · P{item.protein} F{item.fat} C{item.carbs}
+          {Math.round(item.calories)} kcal · P{formatGrams(item.protein)} F
+          {formatGrams(item.fat)} C{formatGrams(item.carbs)}
         </div>
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-1">

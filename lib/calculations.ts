@@ -7,9 +7,19 @@
 
 import type { FoodItem, NutritionDiff, NutritionTotals, Settings } from "./types";
 
+/** 小数第1位に丸める（PFC表示の共通ルール） */
+export function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** グラム系の表示用（小数第1位） */
+export function formatGrams(n: number): string {
+  return String(round1(n));
+}
+
 /** 食品リストから合計カロリー・PFCを計算する */
 export function calculateTotals(items: FoodItem[]): NutritionTotals {
-  return items.reduce(
+  const raw = items.reduce(
     (acc, item) => ({
       calories: acc.calories + item.calories,
       protein: acc.protein + item.protein,
@@ -18,6 +28,12 @@ export function calculateTotals(items: FoodItem[]): NutritionTotals {
     }),
     { calories: 0, protein: 0, fat: 0, carbs: 0 }
   );
+  return {
+    calories: Math.round(raw.calories),
+    protein: round1(raw.protein),
+    fat: round1(raw.fat),
+    carbs: round1(raw.carbs),
+  };
 }
 
 /** 1日分の全食事から合計を計算する */
@@ -38,8 +54,8 @@ export function calculateDiff(
   settings: Settings
 ): NutritionDiff {
   return {
-    calories: totals.calories - settings.targetCalories,
-    protein: totals.protein - settings.targetProtein,
+    calories: Math.round(totals.calories - settings.targetCalories),
+    protein: round1(totals.protein - settings.targetProtein),
   };
 }
 
@@ -63,8 +79,6 @@ export function calculatePFCPercent(totals: NutritionTotals): {
     return { protein: 0, fat: 0, carbs: 0 };
   }
 
-  const round1 = (n: number) => Math.round(n * 10) / 10;
-
   return {
     protein: round1((proteinCal / total) * 100),
     fat: round1((fatCal / total) * 100),
@@ -78,13 +92,14 @@ export function calculateProgress(current: number, target: number): number {
   return Math.round((current / target) * 100);
 }
 
-/** 差分を表示用テキストに変換 */
+/** 差分を表示用テキストに変換（kcalは整数、gは小数第1位） */
 export function formatDiff(value: number, unit: string): string {
-  if (value > 0) {
-    return `▲ +${value}${unit}（超過）`;
+  const display = unit.includes("kcal") ? Math.round(value) : round1(value);
+  if (display > 0) {
+    return `▲ +${display}${unit}（超過）`;
   }
-  if (value < 0) {
-    return `▼ ${value}${unit}（不足）`;
+  if (display < 0) {
+    return `▼ ${display}${unit}（不足）`;
   }
   return `ちょうど目標通り`;
 }
@@ -116,10 +131,6 @@ export function generateId(): string {
 /** 入力欄が空かどうか（0は「入力済み」として扱う） */
 function isNutritionFilled(value: string | undefined): boolean {
   return value !== undefined && value.trim() !== "";
-}
-
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
 }
 
 export type NutritionField = "calories" | "protein" | "fat" | "carbs";
@@ -164,7 +175,13 @@ export function fillMissingNutrition(input: {
 
   const missingCount = [hasCal, hasP, hasF, hasC].filter((x) => !x).length;
   if (missingCount !== 1) {
-    return { calories, protein, fat, carbs, filledField: null };
+    return {
+      calories: Math.round(calories),
+      protein: round1(protein),
+      fat: round1(fat),
+      carbs: round1(carbs),
+      filledField: null,
+    };
   }
 
   let filledField: NutritionField | null = null;
@@ -183,5 +200,11 @@ export function fillMissingNutrition(input: {
     filledField = "carbs";
   }
 
-  return { calories, protein, fat, carbs, filledField };
+  return {
+    calories: Math.round(calories),
+    protein: round1(protein),
+    fat: round1(fat),
+    carbs: round1(carbs),
+    filledField,
+  };
 }
