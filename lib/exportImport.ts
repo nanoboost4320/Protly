@@ -32,6 +32,7 @@ export interface BackupData {
   settings: Settings;
   records: Record<string, DayRecord>;
   favorites?: SavedFood[];
+  /** 一度入力した食材（上限なし・互換キー名 recentFoods） */
   recentFoods?: SavedFood[];
   joyLunch?: JoyLunchMonth[];
 }

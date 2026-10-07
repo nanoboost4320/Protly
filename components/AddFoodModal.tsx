@@ -14,9 +14,9 @@ import {
   addFavorite,
   isFavoriteName,
   loadFavorites,
-  loadRecentFoods,
-  rememberRecent,
+  rememberMyFood,
   searchMyFoods,
+  sortByLastUsed,
   type SavedFood,
 } from "@/lib/favorites";
 import {
@@ -73,7 +73,6 @@ export default function AddFoodModal({
   const [showResults, setShowResults] = useState(false);
   const [saveAsFavorite, setSaveAsFavorite] = useState(false);
   const [favorites, setFavorites] = useState<SavedFood[]>([]);
-  const [recentFoods, setRecentFoods] = useState<SavedFood[]>([]);
   /** 成分表検索を開いているか（明示操作時のみ） */
   const [mextOpen, setMextOpen] = useState(false);
   const [mextResults, setMextResults] = useState<MextFood[]>([]);
@@ -83,7 +82,6 @@ export default function AddFoodModal({
 
   useEffect(() => {
     setFavorites(loadFavorites());
-    setRecentFoods(loadRecentFoods());
   }, []);
 
   // 自分の食材候補（入力のたびに即時）
@@ -232,12 +230,14 @@ export default function AddFoodModal({
     if (!isEdit) {
       if (saveAsFavorite) {
         addFavorite(food);
-        rememberRecent(food, { silent: true });
       } else {
-        rememberRecent(food);
+        rememberMyFood(food);
       }
     } else if (saveAsFavorite) {
       addFavorite(food);
+    } else {
+      // 編集保存でも自分の食材庫を更新（同名があれば上書き）
+      rememberMyFood(food, { silent: true });
     }
 
     onSave(mealType, food);
@@ -247,6 +247,10 @@ export default function AddFoodModal({
   const alreadyFavorite = name.trim() ? isFavoriteName(name) : false;
   const showSearchPanel =
     !isEdit && showResults && name.trim() && !selected && !savedBase;
+  const sortedFavorites = useMemo(
+    () => [...favorites].sort(sortByLastUsed),
+    [favorites]
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
@@ -265,54 +269,27 @@ export default function AddFoodModal({
           </button>
         </div>
 
-        {!isEdit && (favorites.length > 0 || recentFoods.length > 0) && (
-          <div className="mb-4 space-y-3">
-            {favorites.length > 0 && (
-              <div>
-                <p className="mb-1.5 text-xs font-semibold text-slate-500">
-                  よく使う
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {favorites.map((food) => (
-                    <button
-                      key={food.id}
-                      type="button"
-                      onClick={() => selectSaved(food)}
-                      className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-left text-xs text-emerald-800 transition-colors hover:border-emerald-400 hover:bg-emerald-100"
-                    >
-                      <span className="font-medium">{food.name}</span>
-                      <span className="ml-1 text-emerald-600/80">
-                        {food.amount}
-                        {food.unit}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {recentFoods.length > 0 && (
-              <div>
-                <p className="mb-1.5 text-xs font-semibold text-slate-500">
-                  最近使った
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {recentFoods.map((food) => (
-                    <button
-                      key={food.id}
-                      type="button"
-                      onClick={() => selectSaved(food)}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-100"
-                    >
-                      <span className="font-medium">{food.name}</span>
-                      <span className="ml-1 text-slate-400">
-                        {food.amount}
-                        {food.unit}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+        {!isEdit && sortedFavorites.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-1.5 text-xs font-semibold text-slate-500">
+              よく使う
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {sortedFavorites.map((food) => (
+                <button
+                  key={food.id}
+                  type="button"
+                  onClick={() => selectSaved(food)}
+                  className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-left text-xs text-emerald-800 transition-colors hover:border-emerald-400 hover:bg-emerald-100"
+                >
+                  <span className="font-medium">{food.name}</span>
+                  <span className="ml-1 text-emerald-600/80">
+                    {food.amount}
+                    {food.unit}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
