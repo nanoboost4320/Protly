@@ -10,7 +10,7 @@ import AddFoodModal from "@/components/AddFoodModal";
 import BrandWordmark from "@/components/BrandWordmark";
 import { CLOUD_DATA_PULLED_EVENT } from "@/components/CloudSyncProvider";
 import DailySummary from "@/components/DailySummary";
-import MealSection from "@/components/MealSection";
+import MealsBoard from "@/components/MealsBoard";
 import {
   calculateDayTotals,
   calculateDiff,
@@ -22,6 +22,7 @@ import {
   getFirstWeekday,
   shiftMonth,
 } from "@/lib/dateUtils";
+import { moveFoodBetweenMeals } from "@/lib/mealMove";
 import {
   loadAllRecords,
   loadSettings,
@@ -154,6 +155,12 @@ export default function HistoryPage() {
     persist(updated);
   }
 
+  function handleMoveFood(from: MealType, to: MealType, foodId: string) {
+    const updated = moveFoodBetweenMeals(selectedRecord, from, to, foodId);
+    if (updated === selectedRecord) return;
+    persist(updated);
+  }
+
   function changeMonth(delta: number) {
     const next = shiftMonth(year, month, delta);
     setYear(next.year);
@@ -270,18 +277,15 @@ export default function HistoryPage() {
 
         <DailySummary totals={totals} diff={diff} settings={settings} />
 
-        {(["breakfast", "lunch", "dinner"] as MealType[]).map((mealType) => (
-          <MealSection
-            key={mealType}
-            mealType={mealType}
-            items={selectedRecord.meals[mealType]}
-            onAdd={(type) => setFoodModal({ mode: "add", mealType: type })}
-            onEdit={(type, food) =>
-              setFoodModal({ mode: "edit", mealType: type, food })
-            }
-            onDelete={handleDeleteFood}
-          />
-        ))}
+        <MealsBoard
+          meals={selectedRecord.meals}
+          onAdd={(type) => setFoodModal({ mode: "add", mealType: type })}
+          onEdit={(type, food) =>
+            setFoodModal({ mode: "edit", mealType: type, food })
+          }
+          onDelete={handleDeleteFood}
+          onMove={handleMoveFood}
+        />
       </section>
 
       {foodModal && (

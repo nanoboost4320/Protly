@@ -8,7 +8,7 @@
 import AddFoodModal from "@/components/AddFoodModal";
 import BrandWordmark from "@/components/BrandWordmark";
 import DailySummary from "@/components/DailySummary";
-import MealSection from "@/components/MealSection";
+import MealsBoard from "@/components/MealsBoard";
 import {
   calculateDayTotals,
   calculateDiff,
@@ -17,6 +17,7 @@ import {
 } from "@/lib/calculations";
 import { CLOUD_DATA_PULLED_EVENT } from "@/components/CloudSyncProvider";
 import { addDays } from "@/lib/dateUtils";
+import { moveFoodBetweenMeals } from "@/lib/mealMove";
 import { loadDayRecord, loadSettings, saveDayRecord } from "@/lib/storage";
 import type { DayRecord, FoodItem, MealType } from "@/lib/types";
 import { useEffect, useState } from "react";
@@ -79,6 +80,14 @@ export default function HomePage() {
       },
     };
 
+    setDayRecord(updated);
+    saveDayRecord(updated);
+  }
+
+  function handleMoveFood(from: MealType, to: MealType, foodId: string) {
+    if (!dayRecord) return;
+    const updated = moveFoodBetweenMeals(dayRecord, from, to, foodId);
+    if (updated === dayRecord) return;
     setDayRecord(updated);
     saveDayRecord(updated);
   }
@@ -163,20 +172,15 @@ export default function HomePage() {
         <DailySummary totals={totals} diff={diff} settings={settings} />
       </div>
 
-      <div className="space-y-4">
-        {(["breakfast", "lunch", "dinner"] as MealType[]).map((mealType) => (
-          <MealSection
-            key={mealType}
-            mealType={mealType}
-            items={dayRecord.meals[mealType]}
-            onAdd={(type) => setFoodModal({ mode: "add", mealType: type })}
-            onEdit={(type, food) =>
-              setFoodModal({ mode: "edit", mealType: type, food })
-            }
-            onDelete={handleDeleteFood}
-          />
-        ))}
-      </div>
+      <MealsBoard
+        meals={dayRecord.meals}
+        onAdd={(type) => setFoodModal({ mode: "add", mealType: type })}
+        onEdit={(type, food) =>
+          setFoodModal({ mode: "edit", mealType: type, food })
+        }
+        onDelete={handleDeleteFood}
+        onMove={handleMoveFood}
+      />
 
       {foodModal && (
         <AddFoodModal
