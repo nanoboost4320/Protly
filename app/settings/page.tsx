@@ -10,7 +10,7 @@
 
 import BackupPanel from "@/components/BackupPanel";
 import BrandWordmark from "@/components/BrandWordmark";
-import FavoritesPanel from "@/components/FavoritesPanel";
+import { FoodLibraryLinks } from "@/components/FoodLibraryPanels";
 import JoyLunchPanel from "@/components/JoyLunchPanel";
 import { loadSettings, saveSettings } from "@/lib/storage";
 import type { Settings } from "@/lib/types";
@@ -145,7 +145,7 @@ export default function SettingsPage() {
           {saved ? "✓ 保存しました" : "目標を保存"}
         </button>
 
-        <FavoritesPanel />
+        <FoodLibraryLinks />
 
         <JoyLunchPanel />
 

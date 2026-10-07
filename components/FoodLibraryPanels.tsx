@@ -1,8 +1,7 @@
 "use client";
 
 /**
- * 設定画面: よく使う食材・一度入力した食材の一覧・編集・削除
- * 並びは直近に使った／入力したものが上
+ * よく使う／一度入力した食材の管理パネル（設定のサブ画面用）
  */
 
 import {
@@ -19,6 +18,7 @@ import {
   type SavedFood,
 } from "@/lib/favorites";
 import { DATA_CHANGED_EVENT } from "@/lib/storage";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type EditDraft = {
@@ -111,7 +111,7 @@ function FoodEditRow({
   }
 
   return (
-    <li className="rounded-xl border border-slate-100 px-3 py-2.5 text-sm">
+    <li className="rounded-xl border border-slate-100 bg-white px-3 py-2.5 text-sm shadow-sm">
       {!editing ? (
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -233,7 +233,50 @@ function FoodEditRow({
   );
 }
 
-export default function FavoritesPanel() {
+/** よく使う食材の管理一覧 */
+export function FavoritesManagePanel() {
+  const [favorites, setFavorites] = useState<SavedFood[]>([]);
+
+  function refresh() {
+    setFavorites(loadFavorites());
+  }
+
+  useEffect(() => {
+    refresh();
+    window.addEventListener(DATA_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, refresh);
+  }, []);
+
+  const sorted = useMemo(
+    () => [...favorites].sort(sortByLastUsed),
+    [favorites]
+  );
+
+  if (sorted.length === 0) {
+    return (
+      <p className="text-sm text-slate-400">
+        まだありません。食品追加時に「よく使う食材に登録」をチェックしてください。
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {sorted.map((food) => (
+        <FoodEditRow
+          key={food.id}
+          food={food}
+          kind="favorite"
+          onSaved={refresh}
+          onDeleted={refresh}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/** 一度入力した食材の管理一覧（よく使うと重複する名前は除く） */
+export function MyFoodsManagePanel() {
   const [favorites, setFavorites] = useState<SavedFood[]>([]);
   const [myFoods, setMyFoods] = useState<SavedFood[]>([]);
 
@@ -248,73 +291,76 @@ export default function FavoritesPanel() {
     return () => window.removeEventListener(DATA_CHANGED_EVENT, refresh);
   }, []);
 
-  const sortedFavorites = useMemo(
-    () => [...favorites].sort(sortByLastUsed),
-    [favorites]
-  );
-
-  /** よく使うに無い「一度入力」だけ（直近順） */
-  const sortedMyOnly = useMemo(() => {
+  const sorted = useMemo(() => {
     const favNames = new Set(favorites.map((f) => normalizeName(f.name)));
     return [...myFoods]
       .filter((f) => !favNames.has(normalizeName(f.name)))
       .sort(sortByLastUsed);
   }, [myFoods, favorites]);
 
+  if (sorted.length === 0) {
+    return (
+      <p className="text-sm text-slate-400">
+        まだありません。食品を追加すると自動でここに残ります。
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {sorted.map((food) => (
+        <FoodEditRow
+          key={food.id}
+          food={food}
+          kind="my"
+          onSaved={refresh}
+          onDeleted={refresh}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/** 設定トップ用: 件数つき導線ボタン */
+export function FoodLibraryLinks() {
+  const [favCount, setFavCount] = useState(0);
+  const [myCount, setMyCount] = useState(0);
+
+  function refresh() {
+    const favs = loadFavorites();
+    const mine = loadMyFoods();
+    const favNames = new Set(favs.map((f) => normalizeName(f.name)));
+    setFavCount(favs.length);
+    setMyCount(mine.filter((f) => !favNames.has(normalizeName(f.name))).length);
+  }
+
+  useEffect(() => {
+    refresh();
+    window.addEventListener(DATA_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(DATA_CHANGED_EVENT, refresh);
+  }, []);
+
   return (
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <h2 className="mb-1 text-sm font-semibold text-slate-500">
-        登録した食材
-      </h2>
+      <h2 className="mb-1 text-sm font-semibold text-slate-500">登録した食材</h2>
       <p className="mb-4 text-xs leading-relaxed text-slate-400">
-        一度追加した食材は消さず残ります。追加画面では入力候補として出ます。
-        「よく使う」だけ上部チップに表示されます。直近に使ったものが上です。
+        一覧は別画面で編集できます。追加画面では「よく使う」がチップに、「一度入力」は名前候補に出ます。
       </p>
-
-      <div className="mb-5">
-        <h3 className="mb-2 text-xs font-semibold text-emerald-700">
-          よく使う（{sortedFavorites.length}）
-        </h3>
-        {sortedFavorites.length === 0 ? (
-          <p className="text-sm text-slate-400">
-            まだありません。食品追加時に「よく使う食材に登録」をチェックしてください。
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {sortedFavorites.map((food) => (
-              <FoodEditRow
-                key={food.id}
-                food={food}
-                kind="favorite"
-                onSaved={refresh}
-                onDeleted={refresh}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-xs font-semibold text-slate-600">
-          一度入力した食材（{sortedMyOnly.length}）
-        </h3>
-        {sortedMyOnly.length === 0 ? (
-          <p className="text-sm text-slate-400">
-            まだありません。食品を追加すると自動でここに残ります。
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {sortedMyOnly.map((food) => (
-              <FoodEditRow
-                key={food.id}
-                food={food}
-                kind="my"
-                onSaved={refresh}
-                onDeleted={refresh}
-              />
-            ))}
-          </ul>
-        )}
+      <div className="space-y-2">
+        <Link
+          href="/settings/favorites"
+          className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm transition-colors hover:border-emerald-200 hover:bg-emerald-100"
+        >
+          <span className="font-medium text-emerald-900">よく使う食材</span>
+          <span className="text-xs text-emerald-700">{favCount}件 →</span>
+        </Link>
+        <Link
+          href="/settings/my-foods"
+          className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm transition-colors hover:border-slate-300 hover:bg-slate-100"
+        >
+          <span className="font-medium text-slate-800">一度入力した食材</span>
+          <span className="text-xs text-slate-500">{myCount}件 →</span>
+        </Link>
       </div>
     </section>
   );
