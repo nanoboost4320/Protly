@@ -8,7 +8,9 @@ import type { FoodItem } from "./types";
 
 const FAVORITES_KEY = "meal-tracker-favorites";
 const RECENT_KEY = "meal-tracker-recent-foods";
-const MAX_RECENT = 12;
+/** 「一度入力したもの」がすぐ消えないよう多めに保持 */
+const MAX_RECENT = 50;
+const MAX_MY_SEARCH = 12;
 
 /** 登録済み食材（お気に入り） */
 export interface SavedFood {
@@ -115,6 +117,40 @@ export function removeFavorite(id: string): SavedFood[] {
 export function isFavoriteName(name: string): boolean {
   const key = normalizeName(name);
   return loadFavorites().some((f) => normalizeName(f.name) === key);
+}
+
+/**
+ * よく使う＋最近使った食材を名前で絞り込み（同名はよく使う優先）
+ * 入力候補用。query が空なら空配列。
+ */
+export function searchMyFoods(query: string): SavedFood[] {
+  const q = normalizeName(query);
+  if (!q) return [];
+
+  const byName = new Map<string, SavedFood>();
+
+  // recent を先に入れて、あとから favorites で上書き（favorites 優先）
+  for (const food of loadRecentFoods()) {
+    if (!normalizeName(food.name).includes(q)) continue;
+    byName.set(normalizeName(food.name), food);
+  }
+  for (const food of loadFavorites()) {
+    if (!normalizeName(food.name).includes(q)) continue;
+    byName.set(normalizeName(food.name), food);
+  }
+
+  const favoriteKeys = new Set(
+    loadFavorites().map((f) => normalizeName(f.name))
+  );
+
+  return [...byName.values()]
+    .sort((a, b) => {
+      const aFav = favoriteKeys.has(normalizeName(a.name)) ? 0 : 1;
+      const bFav = favoriteKeys.has(normalizeName(b.name)) ? 0 : 1;
+      if (aFav !== bFav) return aFav - bFav;
+      return a.name.localeCompare(b.name, "ja");
+    })
+    .slice(0, MAX_MY_SEARCH);
 }
 
 /** 追加・保存した食品を「最近」に残す */
