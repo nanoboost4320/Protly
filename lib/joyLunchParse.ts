@@ -139,6 +139,12 @@ function nearestRow(y: number, rows: number[]): number {
   return best;
 }
 
+/** 「お休み」など、休日セルの表記かどうか */
+function isHolidayLabel(name: string): boolean {
+  if (!name.trim()) return false;
+  return /休|休業|定休|休み|お休み|holiday/i.test(name);
+}
+
 function pickDishNames(cellItems: TextItem[]): string {
   const byY = new Map<number, string>();
   for (const item of cellItems) {
@@ -290,7 +296,13 @@ export function parseJoyLunchTextItems(
   const halfW = colWidth * 0.55;
 
   const days: JoyLunchDayDraft[] = [];
-  const used = new Set<number>();
+  const usedDays = new Set<number>();
+  const usedNutKeys = new Set<string>();
+  const skippedHolidays: number[] = [];
+
+  // セル中心からこの距離を超える栄養行は「その日のもの」とみなさない
+  const maxNutDistX = halfW;
+  const maxNutDistY = 45;
 
   for (let week = 0; week < weekCount; week++) {
     for (let col = 0; col < 5; col++) {
@@ -301,11 +313,16 @@ export function parseJoyLunchTextItems(
       const cy = rowYs[week];
 
       const nearbyNut = nutEntries
-        .filter(
-          (n) =>
-            nearestColumn(n.item.x, centers) === col &&
-            nearestRow(n.item.y, rowYs) === week
-        )
+        .filter((n) => {
+          const nutKey = `${n.item.x},${n.item.y},${n.nut.calories}`;
+          if (usedNutKeys.has(nutKey)) return false;
+          if (nearestColumn(n.item.x, centers) !== col) return false;
+          if (nearestRow(n.item.y, rowYs) !== week) return false;
+          // 空セル（休日）に隣の栄養が吸い付かないよう距離制限
+          if (Math.abs(n.item.x - cx) > maxNutDistX) return false;
+          if (Math.abs(n.item.y - cy) > maxNutDistY) return false;
+          return true;
+        })
         .sort(
           (a, b) =>
             Math.abs(a.item.x - cx) +
@@ -313,8 +330,9 @@ export function parseJoyLunchTextItems(
             (Math.abs(b.item.x - cx) + Math.abs(b.item.y - cy))
         )[0];
 
+      // カロリー行がない＝弁当屋の休日。取り込まない
       if (!nearbyNut) {
-        warnings.push(`${dayNum}日: 栄養情報が見つかりませんでした`);
+        skippedHolidays.push(dayNum);
         continue;
       }
 
@@ -325,12 +343,21 @@ export function parseJoyLunchTextItems(
       });
 
       const name = pickDishNames(cellTexts);
+      // 「お休み」などの表記だけがある日も休日扱い
+      if (isHolidayLabel(name)) {
+        skippedHolidays.push(dayNum);
+        continue;
+      }
+
       if (!name) {
         warnings.push(`${dayNum}日: 献立名が読めませんでした（栄養のみ）`);
       }
 
-      if (used.has(dayNum)) continue;
-      used.add(dayNum);
+      if (usedDays.has(dayNum)) continue;
+      usedDays.add(dayNum);
+      usedNutKeys.add(
+        `${nearbyNut.item.x},${nearbyNut.item.y},${nearbyNut.nut.calories}`
+      );
 
       days.push({
         day: dayNum,
@@ -343,6 +370,13 @@ export function parseJoyLunchTextItems(
   }
 
   days.sort((a, b) => a.day - b.day);
+
+  if (skippedHolidays.length > 0) {
+    const labels = [...skippedHolidays].sort((a, b) => a - b).join("・");
+    warnings.push(
+      `${labels}日は栄養表示がないためスキップしました（弁当屋の休日の可能性）`
+    );
+  }
 
   if (
     options?.month &&

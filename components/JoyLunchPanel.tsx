@@ -160,6 +160,7 @@ export default function JoyLunchPanel() {
       <p className="mb-4 text-xs leading-relaxed text-slate-400">
         公式サイトの月間お弁当カレンダーPDFをダウンロードし、ここにアップロードしてください。
         日付はPDFの数字ではなく、年月と曜日の位置から割り当てます（ずれ防止）。
+        カロリー表示がない日（弁当屋の休日）は取り込みません。
         読み取り後は一覧で確認してから保存してください。
       </p>
 
