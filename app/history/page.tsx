@@ -162,8 +162,17 @@ export default function HistoryPage() {
     persist(updated);
   }
 
-  function handleAddJoyLunch(food: FoodItem) {
-    handleSaveFood("lunch", food);
+  function handleAddJoyLunch(foods: FoodItem[]) {
+    if (foods.length === 0) return;
+    const updated: DayRecord = {
+      ...selectedRecord,
+      date: selectedDate,
+      meals: {
+        ...selectedRecord.meals,
+        lunch: [...selectedRecord.meals.lunch, ...foods],
+      },
+    };
+    persist(updated);
   }
 
   function changeMonth(delta: number) {

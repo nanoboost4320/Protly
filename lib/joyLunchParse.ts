@@ -343,14 +343,10 @@ export function parseJoyLunchTextItems(
       });
 
       const name = pickDishNames(cellTexts);
-      // 「お休み」などの表記だけがある日も休日扱い
-      if (isHolidayLabel(name)) {
+      // 献立名が読めない／「お休み」表記＝休日（隣の栄養が誤って付くのを防ぐ）
+      if (!name || isHolidayLabel(name)) {
         skippedHolidays.push(dayNum);
         continue;
-      }
-
-      if (!name) {
-        warnings.push(`${dayNum}日: 献立名が読めませんでした（栄養のみ）`);
       }
 
       if (usedDays.has(dayNum)) continue;
@@ -361,7 +357,7 @@ export function parseJoyLunchTextItems(
 
       days.push({
         day: dayNum,
-        name: name || `ジョイランチ ${dayNum}日`,
+        name,
         calories: nearbyNut.nut.calories,
         protein: nearbyNut.nut.protein,
         fat: nearbyNut.nut.fat,

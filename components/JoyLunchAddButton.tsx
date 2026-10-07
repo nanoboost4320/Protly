@@ -2,11 +2,14 @@
 
 /**
  * 選択日にジョイランチ献立があるときのワンタップ追加
+ * （献立＋ごはん220gをまとめて昼食へ追加）
  */
 
 import {
   getJoyLunchForDate,
-  joyLunchDayToFoodItem,
+  JOY_LUNCH_RICE_AMOUNT_G,
+  JOY_LUNCH_RICE_NAME,
+  joyLunchDayToFoodItems,
   type JoyLunchDay,
 } from "@/lib/joyLunch";
 import { DATA_CHANGED_EVENT } from "@/lib/storage";
@@ -16,7 +19,7 @@ import { useEffect, useState } from "react";
 interface JoyLunchAddButtonProps {
   date: string;
   lunchItems: FoodItem[];
-  onAdd: (food: FoodItem) => void;
+  onAdd: (foods: FoodItem[]) => void;
 }
 
 export default function JoyLunchAddButton({
@@ -44,11 +47,11 @@ export default function JoyLunchAddButton({
   function handleAdd() {
     if (alreadyAdded) {
       const ok = confirm(
-        `「${menu!.name}」はすでに昼食にあります。もう一度追加しますか？`
+        `「${menu!.name}」はすでに昼食にあります。もう一度追加しますか？\n（ごはん${JOY_LUNCH_RICE_AMOUNT_G}gも一緒に追加されます）`
       );
       if (!ok) return;
     }
-    onAdd(joyLunchDayToFoodItem(menu!));
+    onAdd(joyLunchDayToFoodItems(menu!));
   }
 
   return (
@@ -57,16 +60,21 @@ export default function JoyLunchAddButton({
         この日のジョイランチ
       </p>
       <p className="mb-1 text-sm font-medium text-slate-800">{menu.name}</p>
-      <p className="mb-3 text-xs text-slate-500">
+      <p className="mb-1 text-xs text-slate-500">
         {menu.calories} kcal · P{menu.protein}g · F{menu.fat}g
         （Cは追加時に自動計算）
+      </p>
+      <p className="mb-3 text-xs text-slate-500">
+        追加時に「{JOY_LUNCH_RICE_NAME}」も一緒に登録します
       </p>
       <button
         type="button"
         onClick={handleAdd}
         className="w-full rounded-xl bg-amber-500 py-2.5 text-sm font-semibold text-white hover:bg-amber-600"
       >
-        {alreadyAdded ? "もう一度昼食に追加" : "ジョイランチを昼食に追加"}
+        {alreadyAdded
+          ? "もう一度昼食に追加（＋ごはん）"
+          : "ジョイランチ＋ごはんを昼食に追加"}
       </button>
     </div>
   );

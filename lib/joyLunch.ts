@@ -3,10 +3,23 @@
  */
 
 import { fillMissingNutrition, generateId } from "./calculations";
+import { scaleNutrition } from "./mextConstants";
 import { DATA_CHANGED_EVENT } from "./storage";
 import type { FoodItem } from "./types";
 
 const STORAGE_KEY = "meal-tracker-joy-lunch";
+
+/** ジョイランチ付属のごはん（水稲めし・精白米うるち米、八訂） */
+const RICE_PER_100G = {
+  baseAmount: 100,
+  calories: 156,
+  protein: 2.5,
+  fat: 0.3,
+  carbs: 37.1,
+} as const;
+
+export const JOY_LUNCH_RICE_AMOUNT_G = 220;
+export const JOY_LUNCH_RICE_NAME = `ごはん ${JOY_LUNCH_RICE_AMOUNT_G}g`;
 
 export interface JoyLunchDay {
   date: string; // YYYY-MM-DD
@@ -106,6 +119,26 @@ export function joyLunchDayToFoodItem(day: JoyLunchDay): FoodItem {
     fat: filled.fat,
     carbs: filled.carbs,
   };
+}
+
+/** ジョイランチ付属のごはん220g（八訂・水稲めし精白米うるち米） */
+export function createJoyLunchRiceFood(): FoodItem {
+  const n = scaleNutrition(RICE_PER_100G, JOY_LUNCH_RICE_AMOUNT_G);
+  return {
+    id: generateId(),
+    name: JOY_LUNCH_RICE_NAME,
+    amount: JOY_LUNCH_RICE_AMOUNT_G,
+    unit: "g",
+    calories: n.calories,
+    protein: n.protein,
+    fat: n.fat,
+    carbs: n.carbs,
+  };
+}
+
+/** 献立＋ごはん220gをまとめて返す */
+export function joyLunchDayToFoodItems(day: JoyLunchDay): FoodItem[] {
+  return [joyLunchDayToFoodItem(day), createJoyLunchRiceFood()];
 }
 
 export function toDateString(year: number, month: number, day: number): string {

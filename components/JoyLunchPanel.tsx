@@ -102,7 +102,15 @@ export default function JoyLunchPanel() {
     }
 
     const days: JoyLunchDay[] = drafts
-      .filter((d) => d.day >= 1 && d.day <= 31 && d.name.trim())
+      .filter((d) => {
+        if (d.day < 1 || d.day > 31) return false;
+        const name = d.name.trim();
+        if (!name) return false;
+        // プレースホルダ名やカロリー0は休日扱い（保存しない）
+        if (/^ジョイランチ\s*\d+日$/.test(name)) return false;
+        if (!(Number(d.calories) > 0)) return false;
+        return true;
+      })
       .map((d) => ({
         date: toDateString(year, month, d.day),
         name: d.name.trim(),

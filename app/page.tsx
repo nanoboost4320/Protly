@@ -93,8 +93,18 @@ export default function HomePage() {
     saveDayRecord(updated);
   }
 
-  function handleAddJoyLunch(food: FoodItem) {
-    handleSaveFood("lunch", food);
+  function handleAddJoyLunch(foods: FoodItem[]) {
+    if (!dayRecord || foods.length === 0) return;
+    const updated: DayRecord = {
+      ...dayRecord,
+      date: selectedDate,
+      meals: {
+        ...dayRecord.meals,
+        lunch: [...dayRecord.meals.lunch, ...foods],
+      },
+    };
+    setDayRecord(updated);
+    saveDayRecord(updated);
   }
 
   if (!dayRecord) {
