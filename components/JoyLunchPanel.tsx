@@ -65,16 +65,19 @@ export default function JoyLunchPanel() {
     try {
       const result = await parseJoyLunchPdfFile(file, { year, month });
       setSourceFileName(file.name);
+      // PDFから年月が読めたらそちらを優先（日付ずれ防止）
+      if (result.detectedYear) setYear(result.detectedYear);
+      if (result.detectedMonth) setMonth(result.detectedMonth);
       setDrafts(result.days);
       setWarnings(result.warnings);
-      if (result.detectedMonth && result.detectedMonth !== month) {
-        // 検知月があれば合わせてあげる（ユーザーは変えられる）
-        setMonth(result.detectedMonth);
-      }
       if (result.days.length === 0) {
         setMessage("献立を読み取れませんでした。別のPDFか手入力で確認してください。");
       } else {
-        setMessage(`${result.days.length} 日分を読み取りました。内容を確認して保存してください。`);
+        const y = result.detectedYear ?? year;
+        const m = result.detectedMonth ?? month;
+        setMessage(
+          `${y}年${m}月として ${result.days.length} 日分を読み取りました。曜日と献立を確認して保存してください。`
+        );
       }
     } catch (err) {
       console.error(err);
@@ -156,7 +159,8 @@ export default function JoyLunchPanel() {
       </h2>
       <p className="mb-4 text-xs leading-relaxed text-slate-400">
         公式サイトの月間お弁当カレンダーPDFをダウンロードし、ここにアップロードしてください。
-        読み取り結果を確認・修正して保存すると、該当日の昼食にワンタップ追加できます（無料・文字付きPDF向け）。
+        日付はPDFの数字ではなく、年月と曜日の位置から割り当てます（ずれ防止）。
+        読み取り後は一覧で確認してから保存してください。
       </p>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
@@ -237,7 +241,15 @@ export default function JoyLunchPanel() {
                 className="grid grid-cols-12 gap-2 rounded-lg bg-slate-50 p-2 text-sm"
               >
                 <div className="col-span-2">
-                  <label className="mb-0.5 block text-[10px] text-slate-400">日</label>
+                  <label className="mb-0.5 block text-[10px] text-slate-400">
+                    日
+                    {(() => {
+                      const wd = ["日", "月", "火", "水", "木", "金", "土"][
+                        new Date(year, month - 1, row.day).getDay()
+                      ];
+                      return ` (${wd})`;
+                    })()}
+                  </label>
                   <input
                     type="number"
                     min={1}

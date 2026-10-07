@@ -1,6 +1,9 @@
 /**
  * ジョイランチ月間カレンダーPDFの解析
- * pdfjs で文字+座標を取り、日付セルごとに献立とPFCを組む
+ *
+ * 方針:
+ * - PDF内の日付数字はフォント都合で位置がずれることがある
+ * - 代わりに「年月ラベル + 曜日ヘッダ列 + 週の行」から日付を決める
  */
 
 export interface JoyLunchDayDraft {
@@ -13,6 +16,7 @@ export interface JoyLunchDayDraft {
 
 export interface JoyLunchParseResult {
   days: JoyLunchDayDraft[];
+  detectedYear: number | null;
   detectedMonth: number | null;
   warnings: string[];
 }
@@ -24,10 +28,23 @@ interface TextItem {
 }
 
 const NOISE_RE =
-  /月決め|注文|容器|協力|原油|おすすめ|土曜日|ライス|山形県|お願い|変更|回収|電子レンジ|タバコ|食材の入手|プラスチック|入荷|傷み|ジョイランチから|お召し上がり|衛生/;
+  /月決め|注文|容器|協力|原油|おすすめ|土曜日|ライス|山形県|お願い|変更|回収|電子レンジ|タバコ|食材の入手|プラスチック|入荷|傷み|ジョイランチから|お召し上がり|衛生|事業所|カレンダー|収穫|さつまいも|ビタミン|食物繊維|便秘|善玉|でんぷん|^今月の$/;
 
 const NUT_RE =
   /●\s*(\d+(?:\.\d+)?)\s*kcal\s*●\s*タンパク(?:質)?\s*(\d+(?:\.\d+)?)\s*g\s*●\s*脂(?:質)?\s*(\d+(?:\.\d+)?)\s*g/i;
+
+const WEEKDAY_MARKERS: Array<{ key: string; index: number }> = [
+  { key: "MON", index: 0 },
+  { key: "TUE", index: 1 },
+  { key: "WED", index: 2 },
+  { key: "THU", index: 3 },
+  { key: "FRI", index: 4 },
+  { key: "月", index: 0 },
+  { key: "火", index: 1 },
+  { key: "水", index: 2 },
+  { key: "木", index: 3 },
+  { key: "金", index: 4 },
+];
 
 function parseNutrition(str: string): {
   calories: number;
@@ -44,33 +61,93 @@ function parseNutrition(str: string): {
   };
 }
 
-function isDayLabel(str: string): boolean {
-  if (!/^\d{1,2}$/.test(str)) return false;
-  const n = Number(str);
-  return n >= 1 && n <= 31;
+function detectYearMonth(items: TextItem[]): {
+  year: number | null;
+  month: number | null;
+} {
+  let year: number | null = null;
+  let month: number | null = null;
+
+  for (const item of items) {
+    const ym = item.str.match(/(20\d{2})\s*年/);
+    if (ym) year = Number(ym[1]);
+  }
+
+  // 「10」「月」が近くにある（ロゴ横の月表示）
+  const monthGlyphs = items.filter((i) => i.str === "月" && i.x < 120 && i.y > 480);
+  const tens = items.filter(
+    (i) => /^(1[0-2]|[1-9])$/.test(i.str) && i.x < 80 && i.y > 480
+  );
+  if (monthGlyphs.length > 0 && tens.length > 0) {
+    month = Number(tens[0].str);
+  }
+
+  return { year, month };
 }
 
-function dedupeDays(items: TextItem[]): TextItem[] {
-  const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
-  const out: TextItem[] = [];
-  for (const d of sorted) {
-    if (out.some((x) => Math.abs(x.x - d.x) < 20 && Math.abs(x.y - d.y) < 15)) {
-      continue;
-    }
-    out.push(d);
+function detectColumnCenters(items: TextItem[]): number[] | null {
+  const centers: Array<number | null> = [null, null, null, null, null];
+
+  for (const marker of WEEKDAY_MARKERS) {
+    if (centers[marker.index] != null) continue;
+    // ヘッダ帯（上部）だけ見る。本文中の「月」などを除外
+    const hits = items.filter(
+      (i) => i.str === marker.key && i.y > 540 && i.x > 200
+    );
+    if (hits.length === 0) continue;
+    const avg = hits.reduce((s, h) => s + h.x, 0) / hits.length;
+    centers[marker.index] = avg;
   }
-  return out;
+
+  if (centers.some((c) => c == null)) return null;
+  return centers as number[];
+}
+
+function nearestColumn(x: number, centers: number[]): number {
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < centers.length; i++) {
+    const d = Math.abs(centers[i] - x);
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function clusterRowYs(ys: number[], gap = 40): number[] {
+  const sorted = [...ys].sort((a, b) => b - a);
+  const rows: number[] = [];
+  for (const y of sorted) {
+    if (rows.some((r) => Math.abs(r - y) < gap)) continue;
+    rows.push(y);
+  }
+  return rows.sort((a, b) => b - a);
+}
+
+function nearestRow(y: number, rows: number[]): number {
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < rows.length; i++) {
+    const d = Math.abs(rows[i] - y);
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best;
 }
 
 function pickDishNames(cellItems: TextItem[]): string {
-  // 同じ高さの重複（アウトライン文字など）をまとめ、長い方を採用
   const byY = new Map<number, string>();
   for (const item of cellItems) {
     if (parseNutrition(item.str)) continue;
-    if (isDayLabel(item.str)) continue;
+    if (/^\d{1,2}$/.test(item.str)) continue;
     if (item.str.length < 2) continue;
     if (NOISE_RE.test(item.str)) continue;
     if (/^\d+(\.\d+)?g?$/.test(item.str)) continue;
+    if (/^(MON|TUE|WED|THU|FRI|月|火|水|木|金)$/.test(item.str)) continue;
 
     const key = Math.round(item.y / 6) * 6;
     const prev = byY.get(key);
@@ -82,10 +159,10 @@ function pickDishNames(cellItems: TextItem[]): string {
   const names = [...byY.entries()]
     .sort((a, b) => b[0] - a[0])
     .map(([, name]) => name)
-    // 部分重複を除去（短い方が長い方に含まれる）
     .filter((name, idx, arr) => {
       return !arr.some(
-        (other, j) => j !== idx && other.includes(name) && other.length > name.length
+        (other, j) =>
+          j !== idx && other.includes(name) && other.length > name.length
       );
     })
     .slice(0, 3);
@@ -93,18 +170,51 @@ function pickDishNames(cellItems: TextItem[]): string {
   return names.join(" / ");
 }
 
-function detectMonth(items: TextItem[]): number | null {
-  // 左上付近の大きな月数字（例: 10）
-  const candidates = items.filter((i) => {
-    if (!/^(1[0-2]|[1-9])$/.test(i.str)) return false;
-    return i.x < 80 && i.y > 480;
-  });
-  if (candidates.length === 0) return null;
-  const n = Number(candidates[0].str);
-  return n >= 1 && n <= 12 ? n : null;
+/** 指定年月の月曜始まりカレンダー（月〜金）の日付グリッド */
+function buildWeekdayGrid(
+  year: number,
+  month: number
+): Array<Array<number | null>> {
+  const first = new Date(year, month - 1, 1);
+  const firstWd = first.getDay(); // 0=日
+  // その月を含む週の月曜日
+  const start = new Date(year, month - 1, 1);
+  const toMonday = firstWd === 0 ? -6 : 1 - firstWd;
+  start.setDate(1 + toMonday);
+
+  const grid: Array<Array<number | null>> = [];
+  const cursor = new Date(start);
+  for (let week = 0; week < 6; week++) {
+    const row: Array<number | null> = [];
+    for (let col = 0; col < 5; col++) {
+      const inMonth =
+        cursor.getFullYear() === year && cursor.getMonth() === month - 1;
+      row.push(inMonth ? cursor.getDate() : null);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    // 土日をスキップして次の月曜へ
+    cursor.setDate(cursor.getDate() + 2);
+    if (row.some((d) => d != null)) grid.push(row);
+    // 翌月に入って月曜始まりの空週なら終了
+    if (cursor.getMonth() !== month - 1 && cursor.getDay() === 1) {
+      const stillIn = grid.some((r) => r.some((d) => d != null));
+      if (stillIn && cursor.getMonth() !== month - 1) {
+        // 追加の週がすべて null なら不要
+        const probe: Array<number | null> = [];
+        const p = new Date(cursor);
+        for (let col = 0; col < 5; col++) {
+          const inMonth =
+            p.getFullYear() === year && p.getMonth() === month - 1;
+          probe.push(inMonth ? p.getDate() : null);
+          p.setDate(p.getDate() + 1);
+        }
+        if (probe.every((d) => d == null)) break;
+      }
+    }
+  }
+  return grid;
 }
 
-/** pdfjs の TextContent items から献立を組み立てる */
 export function parseJoyLunchTextItems(
   rawItems: Array<{ str?: string; transform?: number[]; width?: number }>,
   options?: { year?: number; month?: number }
@@ -118,81 +228,129 @@ export function parseJoyLunchTextItems(
       y: it.transform![5],
     }));
 
-  const dayItems = dedupeDays(
-    items.filter((i) => isDayLabel(i.str) && i.x > 180 && i.y > 100)
-  );
+  const detected = detectYearMonth(items);
+  // PDF上の年月表記を優先（選択ミスによる日付ずれを防ぐ）
+  const year = detected.year ?? options?.year;
+  const month = detected.month ?? options?.month;
 
-  if (dayItems.length === 0) {
+  if (!year || !month) {
     return {
       days: [],
-      detectedMonth: detectMonth(items),
+      detectedYear: detected.year,
+      detectedMonth: detected.month,
       warnings: [
-        "日付セルが見つかりませんでした。文字付きの月間カレンダーPDFか確認してください。",
+        "年月を特定できませんでした。設定で年・月を選んでから再取り込みしてください。",
       ],
     };
   }
 
-  const nutItems = items
+  const centers = detectColumnCenters(items);
+  if (!centers) {
+    return {
+      days: [],
+      detectedYear: detected.year,
+      detectedMonth: detected.month,
+      warnings: ["曜日（月〜金）の列を特定できませんでした"],
+    };
+  }
+
+  // 栄養行は日付数字より信頼できるので、これで週行を決める
+  const nutEntries = items
     .map((i) => ({ item: i, nut: parseNutrition(i.str) }))
-    .filter((x): x is { item: TextItem; nut: NonNullable<ReturnType<typeof parseNutrition>> } =>
-      Boolean(x.nut)
+    .filter(
+      (x): x is { item: TextItem; nut: NonNullable<ReturnType<typeof parseNutrition>> } =>
+        Boolean(x.nut)
     );
+
+  if (nutEntries.length === 0) {
+    return {
+      days: [],
+      detectedYear: detected.year,
+      detectedMonth: detected.month,
+      warnings: ["カロリー行（●○○kcal …）が見つかりませんでした"],
+    };
+  }
+
+  const rowYs = clusterRowYs(
+    nutEntries.map((n) => n.item.y),
+    50
+  );
+  const grid = buildWeekdayGrid(year, month);
+
+  // 行数が週数より多い/少ない場合に備える
+  const weekCount = Math.min(rowYs.length, grid.length);
+  if (rowYs.length !== grid.length) {
+    warnings.push(
+      `週の行数（PDF:${rowYs.length} / カレンダー:${grid.length}）が一致しません。内容を確認してください。`
+    );
+  }
+
+  const colWidth =
+    (centers[centers.length - 1] - centers[0]) / (centers.length - 1);
+  const halfW = colWidth * 0.55;
 
   const days: JoyLunchDayDraft[] = [];
+  const used = new Set<number>();
 
-  for (const dayItem of dayItems) {
-    const day = Number(dayItem.str);
-    const cellTexts = items.filter(
-      (i) =>
-        Math.abs(i.x - dayItem.x) < 55 &&
-        i.y < dayItem.y - 8 &&
-        i.y > dayItem.y - 85
-    );
+  for (let week = 0; week < weekCount; week++) {
+    for (let col = 0; col < 5; col++) {
+      const dayNum = grid[week][col];
+      if (dayNum == null) continue;
 
-    const name = pickDishNames(cellTexts);
-    const nearbyNut = nutItems
-      .filter(
-        (n) =>
-          Math.abs(n.item.x - dayItem.x) < 45 &&
-          n.item.y < dayItem.y - 10 &&
-          n.item.y > dayItem.y - 100
-      )
-      .sort(
-        (a, b) =>
-          Math.abs(a.item.x - dayItem.x) - Math.abs(b.item.x - dayItem.x)
-      )[0];
+      const cx = centers[col];
+      const cy = rowYs[week];
 
-    if (!nearbyNut) {
-      warnings.push(`${day}日: 栄養情報が読めませんでした`);
-      if (name) {
-        days.push({ day, name, calories: 0, protein: 0, fat: 0 });
+      const nearbyNut = nutEntries
+        .filter(
+          (n) =>
+            nearestColumn(n.item.x, centers) === col &&
+            nearestRow(n.item.y, rowYs) === week
+        )
+        .sort(
+          (a, b) =>
+            Math.abs(a.item.x - cx) +
+            Math.abs(a.item.y - cy) -
+            (Math.abs(b.item.x - cx) + Math.abs(b.item.y - cy))
+        )[0];
+
+      if (!nearbyNut) {
+        warnings.push(`${dayNum}日: 栄養情報が見つかりませんでした`);
+        continue;
       }
-      continue;
-    }
 
-    if (!name) {
-      warnings.push(`${day}日: 献立名が読めませんでした（栄養のみ取得）`);
-    }
+      const cellTexts = items.filter((i) => {
+        if (Math.abs(i.x - cx) > halfW) return false;
+        // 栄養行より上、週ヘッダより下くらい
+        return i.y < cy + 85 && i.y > cy - 15;
+      });
 
-    days.push({
-      day,
-      name: name || `ジョイランチ ${day}日`,
-      calories: nearbyNut.nut.calories,
-      protein: nearbyNut.nut.protein,
-      fat: nearbyNut.nut.fat,
-    });
+      const name = pickDishNames(cellTexts);
+      if (!name) {
+        warnings.push(`${dayNum}日: 献立名が読めませんでした（栄養のみ）`);
+      }
+
+      if (used.has(dayNum)) continue;
+      used.add(dayNum);
+
+      days.push({
+        day: dayNum,
+        name: name || `ジョイランチ ${dayNum}日`,
+        calories: nearbyNut.nut.calories,
+        protein: nearbyNut.nut.protein,
+        fat: nearbyNut.nut.fat,
+      });
+    }
   }
 
   days.sort((a, b) => a.day - b.day);
 
-  const detectedMonth = detectMonth(items);
   if (
     options?.month &&
-    detectedMonth &&
-    detectedMonth !== options.month
+    detected.month &&
+    detected.month !== options.month
   ) {
     warnings.push(
-      `PDF上の月は ${detectedMonth} 月の可能性があります（選択は ${options.month} 月）`
+      `PDF表記は ${detected.month} 月の可能性があります（選択は ${options.month} 月）`
     );
   }
 
@@ -200,7 +358,12 @@ export function parseJoyLunchTextItems(
     warnings.push("献立を1件も読み取れませんでした");
   }
 
-  return { days, detectedMonth, warnings };
+  return {
+    days,
+    detectedYear: detected.year,
+    detectedMonth: detected.month,
+    warnings,
+  };
 }
 
 /** PDFファイルを解析する（ブラウザ専用） */
@@ -209,7 +372,6 @@ export async function parseJoyLunchPdfFile(
   options: { year: number; month: number }
 ): Promise<JoyLunchParseResult> {
   const pdfjs = await import("pdfjs-dist");
-  // worker は CDN から（無料・追加サーバー不要）
   pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
   const data = new Uint8Array(await file.arrayBuffer());
