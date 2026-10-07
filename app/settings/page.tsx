@@ -11,6 +11,7 @@
 import BackupPanel from "@/components/BackupPanel";
 import BrandWordmark from "@/components/BrandWordmark";
 import FavoritesPanel from "@/components/FavoritesPanel";
+import JoyLunchPanel from "@/components/JoyLunchPanel";
 import { loadSettings, saveSettings } from "@/lib/storage";
 import type { Settings } from "@/lib/types";
 import { useEffect, useState } from "react";
@@ -145,6 +146,8 @@ export default function SettingsPage() {
         </button>
 
         <FavoritesPanel />
+
+        <JoyLunchPanel />
 
         <BackupPanel />
       </div>

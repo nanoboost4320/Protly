@@ -10,6 +10,7 @@ import AddFoodModal from "@/components/AddFoodModal";
 import BrandWordmark from "@/components/BrandWordmark";
 import { CLOUD_DATA_PULLED_EVENT } from "@/components/CloudSyncProvider";
 import DailySummary from "@/components/DailySummary";
+import JoyLunchAddButton from "@/components/JoyLunchAddButton";
 import MealsBoard from "@/components/MealsBoard";
 import {
   calculateDayTotals,
@@ -161,6 +162,10 @@ export default function HistoryPage() {
     persist(updated);
   }
 
+  function handleAddJoyLunch(food: FoodItem) {
+    handleSaveFood("lunch", food);
+  }
+
   function changeMonth(delta: number) {
     const next = shiftMonth(year, month, delta);
     setYear(next.year);
@@ -276,6 +281,12 @@ export default function HistoryPage() {
         </h2>
 
         <DailySummary totals={totals} diff={diff} settings={settings} />
+
+        <JoyLunchAddButton
+          date={selectedDate}
+          lunchItems={selectedRecord.meals.lunch}
+          onAdd={handleAddJoyLunch}
+        />
 
         <MealsBoard
           meals={selectedRecord.meals}

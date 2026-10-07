@@ -8,6 +8,7 @@
 import AddFoodModal from "@/components/AddFoodModal";
 import BrandWordmark from "@/components/BrandWordmark";
 import DailySummary from "@/components/DailySummary";
+import JoyLunchAddButton from "@/components/JoyLunchAddButton";
 import MealsBoard from "@/components/MealsBoard";
 import {
   calculateDayTotals,
@@ -92,6 +93,10 @@ export default function HomePage() {
     saveDayRecord(updated);
   }
 
+  function handleAddJoyLunch(food: FoodItem) {
+    handleSaveFood("lunch", food);
+  }
+
   if (!dayRecord) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -170,6 +175,14 @@ export default function HomePage() {
 
       <div className="mb-6">
         <DailySummary totals={totals} diff={diff} settings={settings} />
+      </div>
+
+      <div className="mb-4">
+        <JoyLunchAddButton
+          date={selectedDate}
+          lunchItems={dayRecord.meals.lunch}
+          onAdd={handleAddJoyLunch}
+        />
       </div>
 
       <MealsBoard

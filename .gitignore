@@ -34,6 +34,8 @@ yarn-error.log*
 # local conversion source (regenerate JSON via scripts/build-mext-json.mjs)
 /data/mext-raw.xlsx
 /tmp-mext.html
+/tmp-joy-menu.pdf
+/tmp-joy-text.txt
 
 # typescript
 *.tsbuildinfo
