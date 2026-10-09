@@ -124,9 +124,6 @@ export default function HomePage() {
         <h1 className="leading-none">
           <BrandWordmark size="hero" />
         </h1>
-        <p className="mt-1.5 text-sm text-slate-500">
-          {isToday ? "今日の食事記録" : "選択した日の食事記録"}
-        </p>
       </header>
 
       {/* 記録日の選択 */}

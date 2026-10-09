@@ -11,7 +11,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/", label: "今日", icon: "📋" },
+  { href: "/", label: "ホーム", icon: "📋" },
   { href: "/history", label: "履歴", icon: "📅" },
   { href: "/stats", label: "統計", icon: "📊" },
   { href: "/settings", label: "設定", icon: "⚙️" },
