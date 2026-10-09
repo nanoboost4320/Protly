@@ -143,7 +143,7 @@ export default function StatsPage() {
     <main className="px-4 py-6">
       <header className="mb-6">
         <p className="mb-1">
-          <BrandWordmark size="sm" />
+          <BrandWordmark />
         </p>
         <h1 className="text-xl font-bold">📊 統計</h1>
         <p className="text-sm text-slate-500">

@@ -122,7 +122,7 @@ export default function HomePage() {
     <main className="px-4 py-6">
       <header className="mb-5">
         <h1 className="leading-none">
-          <BrandWordmark size="hero" />
+          <BrandWordmark />
         </h1>
       </header>
 

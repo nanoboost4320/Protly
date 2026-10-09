@@ -13,7 +13,7 @@ export default function FavoritesSettingsPage() {
     <main className="px-4 py-6">
       <header className="mb-6">
         <p className="mb-1">
-          <BrandWordmark size="sm" />
+          <BrandWordmark />
         </p>
         <Link
           href="/settings"
