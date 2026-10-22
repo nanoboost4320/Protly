@@ -65,13 +65,9 @@ export default function AddFoodModal({
   /** 確定済みの食品名。これと同じ間は候補を出さない */
   const confirmedNameRef = useRef<string | null>(initialFood?.name ?? null);
   const amountInputRef = useRef<HTMLInputElement>(null);
-  /** 候補タップ中は、入力欄の blur で候補を消さない */
-  const pickingRef = useRef(false);
-  const closeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setFavorites(loadFavorites());
-    return () => cancelScheduledClose();
   }, []);
 
   const myMatches = useMemo(() => {
@@ -99,31 +95,7 @@ export default function AddFoodModal({
     setShowResults(false);
   }
 
-  function cancelScheduledClose() {
-    if (closeTimerRef.current == null) return;
-    window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = null;
-  }
-
-  /**
-   * すぐ消すと、スマホで候補をタップした瞬間にリストが消えて選択できない。
-   * 少し待って、その間に候補が選ばれたら閉じない。
-   */
-  function scheduleConfirmName(value: string) {
-    cancelScheduledClose();
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null;
-      if (pickingRef.current) {
-        pickingRef.current = false;
-        return;
-      }
-      confirmName(value);
-    }, 400);
-  }
-
   function selectSaved(food: SavedFood) {
-    pickingRef.current = true;
-    cancelScheduledClose();
     confirmName(food.name);
     setSavedBase(food);
     setAmount(String(food.amount));
@@ -133,7 +105,6 @@ export default function AddFoodModal({
     setFat(formatGrams(food.fat));
     setCarbs(formatGrams(food.carbs));
     setSaveAsFavorite(false);
-    pickingRef.current = false;
   }
 
   function handleNameChange(value: string) {
@@ -255,16 +226,13 @@ export default function AddFoodModal({
               type="text"
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
-              onCompositionEnd={(e) => scheduleConfirmName(e.currentTarget.value)}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing || e.key === "Process") return;
                 if (e.key !== "Enter") return;
                 e.preventDefault();
-                cancelScheduledClose();
                 confirmName(e.currentTarget.value);
                 amountInputRef.current?.focus();
               }}
-              onBlur={(e) => scheduleConfirmName(e.currentTarget.value)}
               onFocus={() => {
                 if (nameRef.current !== confirmedNameRef.current) {
                   setShowResults(true);
@@ -277,7 +245,7 @@ export default function AddFoodModal({
             />
 
             {showSearchPanel && (
-              <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+              <div className="mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
                 <p className="border-b border-slate-100 px-3 py-1.5 text-[11px] leading-snug text-slate-400">
                   自分の食材（よく使う・一度入力したもの）
                 </p>
