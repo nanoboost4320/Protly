@@ -2,8 +2,7 @@
  * ジョイランチ月間メニューの保存・読み込み
  */
 
-import { fillMissingNutrition, generateId } from "./calculations";
-import { scaleNutrition } from "./mextConstants";
+import { fillMissingNutrition, generateId, round1 } from "./calculations";
 import { DATA_CHANGED_EVENT } from "./storage";
 import type { FoodItem } from "./types";
 
@@ -121,9 +120,15 @@ export function joyLunchDayToFoodItem(day: JoyLunchDay): FoodItem {
   };
 }
 
-/** ジョイランチ付属のごはん220g（八訂・水稲めし精白米うるち米） */
+/** ジョイランチ付属のごはん220g（水稲めし・精白米うるち米、100gあたりの値から換算） */
 export function createJoyLunchRiceFood(): FoodItem {
-  const n = scaleNutrition(RICE_PER_100G, JOY_LUNCH_RICE_AMOUNT_G);
+  const ratio = JOY_LUNCH_RICE_AMOUNT_G / RICE_PER_100G.baseAmount;
+  const n = {
+    calories: Math.round(RICE_PER_100G.calories * ratio),
+    protein: round1(RICE_PER_100G.protein * ratio),
+    fat: round1(RICE_PER_100G.fat * ratio),
+    carbs: round1(RICE_PER_100G.carbs * ratio),
+  };
   return {
     id: generateId(),
     name: JOY_LUNCH_RICE_NAME,

@@ -2,9 +2,8 @@
 
 /**
  * 食品追加・編集モーダル
- * - よく使う／最近使った食材からワンタップ入力
- * - 名前入力の候補は「自分の食材」優先
- * - 日本食品標準成分表は明示操作時のみ検索
+ * - よく使う／一度入力した食材からワンタップ入力
+ * - 食品名を確定すると候補は閉じる
  * - 手動入力も可能
  * - 編集時は既存データを初期表示し、同じIDで更新
  */
@@ -24,13 +23,8 @@ import {
   sortByLastUsed,
   type SavedFood,
 } from "@/lib/favorites";
-import {
-  MEXT_ATTRIBUTION,
-  scaleNutrition,
-  type MextFood,
-} from "@/lib/mextConstants";
 import { MEAL_LABELS, type FoodItem, type MealType } from "@/lib/types";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface AddFoodModalProps {
   mealType: MealType;
@@ -38,12 +32,6 @@ interface AddFoodModalProps {
   initialFood?: FoodItem | null;
   onSave: (mealType: MealType, food: FoodItem) => void;
   onClose: () => void;
-}
-
-interface SearchResponse {
-  attribution?: string;
-  items: MextFood[];
-  message?: string;
 }
 
 export default function AddFoodModal({
@@ -69,85 +57,25 @@ export default function AddFoodModal({
   const [carbs, setCarbs] = useState(
     initialFood ? String(initialFood.carbs) : ""
   );
-  const [selected, setSelected] = useState<MextFood | null>(null);
   const [savedBase, setSavedBase] = useState<SavedFood | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [saveAsFavorite, setSaveAsFavorite] = useState(false);
   const [favorites, setFavorites] = useState<SavedFood[]>([]);
-  /** 成分表検索を開いているか（明示操作時のみ） */
-  const [mextOpen, setMextOpen] = useState(false);
-  const [mextResults, setMextResults] = useState<MextFood[]>([]);
-  const [mextSearching, setMextSearching] = useState(false);
-  const [mextError, setMextError] = useState<string | null>(null);
-  const [attribution, setAttribution] = useState(MEXT_ATTRIBUTION);
+  const nameRef = useRef(initialFood?.name ?? "");
+  /** 確定済みの食品名。これと同じ間は候補を出さない */
+  const confirmedNameRef = useRef<string | null>(initialFood?.name ?? null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setFavorites(loadFavorites());
   }, []);
 
-  // 自分の食材候補（入力のたびに即時）
   const myMatches = useMemo(() => {
-    if (isEdit || selected || savedBase) return [];
+    if (isEdit || savedBase) return [];
     return searchMyFoods(name);
-  }, [name, isEdit, selected, savedBase]);
+  }, [name, isEdit, savedBase]);
 
-  // 成分表検索は「成分表から探す」を開いているときだけ
-  useEffect(() => {
-    if (isEdit || !mextOpen) {
-      setMextResults([]);
-      setMextSearching(false);
-      setMextError(null);
-      return;
-    }
-
-    const q = name.trim();
-    if (!q || selected) {
-      setMextResults([]);
-      setMextSearching(false);
-      setMextError(null);
-      return;
-    }
-
-    const timer = window.setTimeout(async () => {
-      setMextSearching(true);
-      setMextError(null);
-      try {
-        const res = await fetch(
-          `/api/nutrition-search?q=${encodeURIComponent(q)}`
-        );
-        const data = (await res.json()) as SearchResponse;
-        if (!res.ok) {
-          setMextResults([]);
-          setMextError(data.message ?? "検索に失敗しました");
-          return;
-        }
-        if (data.attribution) setAttribution(data.attribution);
-        setMextResults(data.items ?? []);
-      } catch {
-        setMextResults([]);
-        setMextError("検索に失敗しました。通信を確認してください。");
-      } finally {
-        setMextSearching(false);
-      }
-    }, 300);
-
-    return () => window.clearTimeout(timer);
-  }, [name, selected, isEdit, mextOpen]);
-
-  // 成分表で選んだ食材 + 量 が変わったら自動計算
-  useEffect(() => {
-    if (!selected) return;
-    const amt = Number(amount);
-    if (!amt || amt <= 0) return;
-
-    const scaled = scaleNutrition(selected, amt);
-    setCalories(String(scaled.calories));
-    setProtein(String(scaled.protein));
-    setFat(String(scaled.fat));
-    setCarbs(String(scaled.carbs));
-  }, [selected, amount]);
-
-  // よく使う／最近から選んだ食材は、量を変えると比例計算
+  // よく使う／一度入力から選んだ食材は、量を変えると比例計算
   useEffect(() => {
     if (!savedBase || savedBase.amount <= 0) return;
     const amt = Number(amount);
@@ -160,45 +88,38 @@ export default function AddFoodModal({
     setCarbs(String(round1(savedBase.carbs * ratio)));
   }, [savedBase, amount]);
 
-  function selectFood(food: MextFood) {
-    setSelected(food);
-    setSavedBase(null);
-    setName(food.name);
-    setAmount(String(food.baseAmount));
-    setUnit(food.unit);
+  function confirmName(value: string) {
+    nameRef.current = value;
+    confirmedNameRef.current = value;
+    setName(value);
     setShowResults(false);
-    setMextOpen(false);
-    setMextResults([]);
-    setSaveAsFavorite(false);
   }
 
   function selectSaved(food: SavedFood) {
-    setSelected(null);
+    confirmName(food.name);
     setSavedBase(food);
-    setName(food.name);
     setAmount(String(food.amount));
     setUnit(food.unit);
     setCalories(String(Math.round(food.calories)));
     setProtein(formatGrams(food.protein));
     setFat(formatGrams(food.fat));
     setCarbs(formatGrams(food.carbs));
-    setShowResults(false);
-    setMextOpen(false);
-    setMextResults([]);
     setSaveAsFavorite(false);
   }
 
   function handleNameChange(value: string) {
+    nameRef.current = value;
     setName(value);
-    setSelected(null);
     setSavedBase(null);
+    if (value === confirmedNameRef.current) {
+      setShowResults(false);
+      return;
+    }
+    confirmedNameRef.current = null;
     setShowResults(true);
-    // 名前を打ち直したら成分表パネルは閉じる（自分の候補を優先）
-    setMextOpen(false);
   }
 
   function clearAutoSource() {
-    setSelected(null);
     setSavedBase(null);
   }
 
@@ -247,7 +168,11 @@ export default function AddFoodModal({
 
   const alreadyFavorite = name.trim() ? isFavoriteName(name) : false;
   const showSearchPanel =
-    !isEdit && showResults && name.trim() && !selected && !savedBase;
+    !isEdit &&
+    showResults &&
+    name.trim() !== "" &&
+    !savedBase &&
+    myMatches.length > 0;
   const sortedFavorites = useMemo(
     () => [...favorites].sort(sortByLastUsed),
     [favorites]
@@ -301,10 +226,24 @@ export default function AddFoodModal({
               type="text"
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
-              onFocus={() => setShowResults(true)}
+              onCompositionEnd={(e) => confirmName(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.key === "Process") return;
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                confirmName(e.currentTarget.value);
+                amountInputRef.current?.focus();
+              }}
+              onBlur={(e) => confirmName(e.currentTarget.value)}
+              onFocus={() => {
+                if (nameRef.current !== confirmedNameRef.current) {
+                  setShowResults(true);
+                }
+              }}
               placeholder="例: ごはん、鶏むね、木綿豆腐"
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
               autoComplete="off"
+              enterKeyHint="done"
             />
 
             {showSearchPanel && (
@@ -313,12 +252,12 @@ export default function AddFoodModal({
                   自分の食材（よく使う・一度入力したもの）
                 </p>
 
-                {myMatches.length > 0 ? (
-                  <ul className="max-h-48 overflow-y-auto">
+                <ul className="max-h-48 overflow-y-auto">
                     {myMatches.map((food) => (
                       <li key={food.id}>
                         <button
                           type="button"
+                          onPointerDown={(e) => e.preventDefault()}
                           onClick={() => selectSaved(food)}
                           className="w-full px-4 py-2.5 text-left text-sm hover:bg-emerald-50"
                         >
@@ -333,94 +272,12 @@ export default function AddFoodModal({
                         </button>
                       </li>
                     ))}
-                  </ul>
-                ) : (
-                  <p className="px-4 py-3 text-sm text-slate-400">
-                    自分の登録にありません。下で手入力するか、成分表から探せます。
-                  </p>
-                )}
-
-                {!mextOpen ? (
-                  <div className="border-t border-slate-100 p-2">
-                    <button
-                      type="button"
-                      onClick={() => setMextOpen(true)}
-                      className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-slate-50"
-                    >
-                      成分表から探す…
-                    </button>
-                  </div>
-                ) : (
-                  <div className="border-t border-slate-100">
-                    <div className="flex items-center justify-between border-b border-slate-50 px-3 py-1.5">
-                      <p className="text-[11px] leading-snug text-slate-400">
-                        {attribution}（可食部100gあたり）
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMextOpen(false);
-                          setMextResults([]);
-                          setMextError(null);
-                        }}
-                        className="text-[11px] text-slate-400 hover:text-slate-600"
-                      >
-                        閉じる
-                      </button>
-                    </div>
-                    {mextSearching && (
-                      <p className="px-4 py-3 text-sm text-slate-400">
-                        検索中...
-                      </p>
-                    )}
-                    {!mextSearching && mextError && (
-                      <p className="px-4 py-3 text-sm text-red-500">
-                        {mextError}
-                      </p>
-                    )}
-                    {!mextSearching &&
-                      !mextError &&
-                      mextResults.length === 0 && (
-                        <p className="px-4 py-3 text-sm text-slate-400">
-                          成分表に候補がありません。下で栄養素を手動入力できます。
-                        </p>
-                      )}
-                    {!mextSearching && mextResults.length > 0 && (
-                      <ul className="max-h-40 overflow-y-auto">
-                        {mextResults.map((food) => (
-                          <li key={food.id}>
-                            <button
-                              type="button"
-                              onClick={() => selectFood(food)}
-                              className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50"
-                            >
-                              <span className="font-medium">{food.name}</span>
-                              <span className="mt-0.5 block text-xs text-slate-400">
-                                {food.baseAmount}
-                                {food.unit}あたり: {Math.round(food.calories)}
-                                kcal P{formatGrams(food.protein)}g F
-                                {formatGrams(food.fat)}g C
-                                {formatGrams(food.carbs)}g
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
+                </ul>
               </div>
             )}
           </div>
 
-          {selected && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
-              「{selected.name}」を選択中。量を変えると自動計算されます。
-              <p className="mt-1 text-xs text-emerald-700/80">{attribution}</p>
-            </div>
-          )}
-
-          {savedBase && !selected && (
+          {savedBase && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
               「{savedBase.name}」を呼び出し中。量を変えると比例計算されます。
             </div>
@@ -430,6 +287,7 @@ export default function AddFoodModal({
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium">量</label>
               <input
+                ref={amountInputRef}
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -473,7 +331,7 @@ export default function AddFoodModal({
 
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="mb-1 text-sm font-medium text-slate-600">
-              栄養素（自分の食材／成分表で自動入力 / 手動でもOK）
+              栄養素（自分の食材で自動入力 / 手入力でもOK）
             </p>
             <p className="mb-3 text-xs text-slate-400">
               カロリー・P・F・Cのうち1つだけ空欄なら、保存時に自動計算します
